@@ -17,7 +17,6 @@ import { spawn, execSync } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { EventEmitter } from 'events';
-import http from 'http';
 
 import { processPdf, generateCsvReport, ensureDirs, INPUT_DIR, DONE_DIR, NEEDS_REVIEW_DIR, RESULTS_DIR, AUTO_TAGGED_DIR } from './pdf-tools.js';
 
@@ -26,41 +25,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 3456;
-const OAUTH_PORT = 3457;
-const OAUTH_BASE = `http://127.0.0.1:${OAUTH_PORT}`;
 
 // SSE event emitter for streaming terminal output
 const terminalEmitter = new EventEmitter();
-
-// Helper: proxy request to OAuth server preserving cookies
-function proxyToOAuth(req, res, targetPath) {
-  const options = {
-    hostname: '127.0.0.1',
-    port: OAUTH_PORT,
-    path: targetPath,
-    method: req.method,
-    headers: {
-      ...req.headers,
-      host: `127.0.0.1:${OAUTH_PORT}`,
-    },
-  };
-
-  const proxyReq = http.request(options, (proxyRes) => {
-    // Forward set-cookie headers
-    const cookies = proxyRes.headers['set-cookie'];
-    if (cookies) {
-      res.setHeader('Set-Cookie', cookies);
-    }
-    res.writeHead(proxyRes.statusCode, proxyRes.headers);
-    proxyRes.pipe(res);
-  });
-
-  proxyReq.on('error', (err) => {
-    res.status(502).json({ error: 'OAuth server not running. Run: python adobe_oauth_server.py' });
-  });
-
-  req.pipe(proxyReq);
-}
 
 function terminalLog(message, type = 'info') {
   const ts = new Date().toLocaleTimeString();
@@ -413,70 +380,28 @@ app.post('/api/auto-tag', async (req, res) => {
   }
 });
 
-// ── OAuth Proxy Routes ─────────────────────────────────────
-// Proxy auth requests to the OAuth server, preserving cookies
-
-// GET /auth/login — Redirect to Adobe OAuth
-app.get('/auth/login', (req, res) => {
-  proxyToOAuth(req, res, '/login');
-});
-
-// GET /auth/callback — Handle OAuth callback
-app.get('/auth/callback', (req, res) => {
-  proxyToOAuth(req, res, `/callback${req.url.split('?')[1] ? '?' + req.url.split('?')[1] : ''}`);
-});
-
-// GET /auth/logout — Log out
-app.get('/auth/logout', (req, res) => {
-  proxyToOAuth(req, res, '/logout');
-});
-
-// GET /auth/status — Check auth status
-app.get('/auth/status', (req, res) => {
-  proxyToOAuth(req, res, '/status');
-});
-
-// POST /api/adobe-autotag — Run Adobe Cloud auto-tag (uses OAuth session)
+// POST /api/adobe-autotag — Run Adobe Cloud auto-tag using developer credentials
 app.post('/api/adobe-autotag', async (req, res) => {
   const { fileNames } = req.body;
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
 
-  // Check if user is authenticated via OAuth
+  // Check if credentials file exists
+  const credsPath = path.join(__dirname, 'adobe_credentials.json');
+  if (!existsSync(credsPath)) {
+    return res.status(401).json({
+      error: 'Adobe credentials not found. Create adobe_credentials.json with client_id and client_secret.',
+    });
+  }
+
   try {
-    const statusResp = await fetch(`${OAUTH_BASE}/status`, {
-      headers: { Cookie: req.headers.cookie || '' },
-    });
-    const status = await statusResp.json();
+    terminalLog('Starting Adobe Cloud Auto-Tag...', 'accent');
+    terminalLog('Uploading PDFs to Adobe API, auto-tagging, and downloading.', 'info');
 
-    if (!status.authenticated) {
-      return res.status(401).json({
-        error: 'Not authenticated. Please sign in with Adobe first.',
-        loginUrl: '/auth/login',
-      });
-    }
-
-    // Get the access token from the OAuth server
-    const tokenResp = await fetch(`${OAUTH_BASE}/token`, {
-      headers: { Cookie: req.headers.cookie || '' },
-    });
-    const tokenData = await tokenResp.json();
-
-    if (!tokenData.access_token) {
-      return res.status(401).json({ error: 'No valid access token.' });
-    }
-
-    // Run auto-tag with user's token
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-    terminalLog('Starting Adobe Cloud Auto-Tag (OAuth session)...', 'accent');
-    terminalLog(`Authenticated as: ${status.user?.name || status.user?.email || 'Adobe user'}`, 'info');
-
-    // Pass token to Python via env var
     const proc = spawn(pythonCmd, [
       '-c',
       `
 import sys, json, os
 sys.path.insert(0, '.')
-os.environ['ADOBE_ACCESS_TOKEN'] = r'${tokenData.access_token.replace(/'/g, "\\'")}'
-
 import builtins
 original_input = builtins.input
 def mock_input(prompt=""):

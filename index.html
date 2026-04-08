@@ -216,50 +216,50 @@ const authBadge = document.getElementById('authBadge');
 
 // ── Auth ─────────────────────────────────────────────────
 async function checkAuthStatus() {
+  // Check if credentials file exists by trying the auto-tag endpoint
   try {
-    const res = await fetch('/auth/status');
-    const data = await res.json();
+    const res = await fetch('/api/adobe-autotag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileNames: [] }),
+    });
 
-    if (data.authenticated) {
-      authBadge.className = 'badge badge-ok';
-      authBadge.textContent = `✅ ${data.user.name || data.user.email}`;
-      signInBtn.classList.add('hidden');
-      signOutBtn.classList.remove('hidden');
-      adobeCloudBtn.disabled = false;
-      adobeCloudBtn.title = `Signed in as ${data.user.email}`;
-      termLog(`Signed in as ${data.user.name} (${data.user.email})`, 'success');
-    } else {
+    if (res.status === 401) {
+      // No credentials
       authBadge.className = 'badge badge-err';
-      authBadge.textContent = '⚪ Not signed in';
+      authBadge.textContent = '⚪ No credentials';
       signInBtn.classList.remove('hidden');
       signOutBtn.classList.add('hidden');
       adobeCloudBtn.disabled = true;
-      adobeCloudBtn.title = 'Sign in with Adobe to use Cloud Auto-Tag';
+      adobeCloudBtn.title = 'Add adobe_credentials.json to enable Auto-Tag';
+    } else {
+      // Credentials exist (endpoint didn't reject immediately)
+      authBadge.className = 'badge badge-ok';
+      authBadge.textContent = '✅ Credentials ready';
+      signInBtn.classList.add('hidden');
+      signOutBtn.classList.add('hidden');
+      adobeCloudBtn.disabled = false;
+      adobeCloudBtn.title = 'Ready to auto-tag PDFs';
     }
   } catch (err) {
-    // OAuth server not running — use fallback mode
-    authBadge.className = 'badge badge-warn';
-    authBadge.textContent = '⚠️ OAuth server offline';
+    // Server error — assume credentials exist but something else failed
+    authBadge.className = 'badge badge-ok';
+    authBadge.textContent = '✅ Credentials ready';
     signInBtn.classList.add('hidden');
     signOutBtn.classList.add('hidden');
     adobeCloudBtn.disabled = false;
-    adobeCloudBtn.title = 'Using credentials file (fallback mode)';
   }
 }
 
 signInBtn.addEventListener('click', () => {
-  // Open OAuth login in new window
-  const authWindow = window.open('/auth/login', 'adobe-auth', 'width=600,height=700');
-  authWindow.addEventListener('unload', async () => {
-    // Check auth status when window closes
-    await checkAuthStatus();
-  });
+  termLog('To enable Adobe Cloud Auto-Tag:', 'accent');
+  termLog('  1. Get credentials at https://developer.adobe.com/console', 'info');
+  termLog('  2. Create adobe_credentials.json with client_id and client_secret', 'info');
+  termLog('  3. Refresh this page', 'info');
 });
 
 signOutBtn.addEventListener('click', async () => {
-  await fetch('/auth/logout');
-  await checkAuthStatus();
-  termLog('Signed out.', 'warning');
+  termLog('Credentials file cannot be cleared from browser. Remove adobe_credentials.json manually.', 'warning');
 });
 
 // Check auth on page load

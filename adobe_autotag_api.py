@@ -68,7 +68,9 @@ class AdobeAPI:
         if self.access_token and time.time() < self.token_expires - 60:
             return self.access_token
 
-        print("  🔑 Authenticating with Adobe IMS...")
+        print("  🔑 Authenticating with Adobe PDF Services API...")
+
+        # PDF Services API uses client_credentials grant with project scopes
         resp = self.session.post(
             ADOBE_TOKEN_URL,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
@@ -76,6 +78,7 @@ class AdobeAPI:
                 "grant_type": "client_credentials",
                 "client_id": self.client_id,
                 "client_secret": self.client_secret,
+                "scope": "openid AdobeID DCAPI",
             },
         )
 
@@ -325,6 +328,12 @@ def process_all_pdfs(api: AdobeAPI, pdf_files: list, output_dir: Path) -> list:
 
 def main():
     """Main entry point."""
+    # Fix Windows console encoding for emoji support
+    if sys.platform == 'win32':
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
     print("=" * 60)
     print("Adobe PDF Accessibility Auto-Tag — Batch Processor")
     print("=" * 60)
