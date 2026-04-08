@@ -96,6 +96,11 @@
     <header>
       <h1>📄 PDF ADA Compliance Processor</h1>
       <p>Accessibility assessment and remediation for WCAG/PDF-UA compliance</p>
+      <div id="authStatus" style="margin-top:0.75rem;display:flex;align-items:center;justify-content:center;gap:0.75rem;">
+        <span id="authBadge" class="badge" style="font-size:0.75rem;padding:0.25rem 0.75rem;">⚪ Not signed in</span>
+        <button class="btn" id="signInBtn" style="font-size:0.75rem;">🔐 Sign in with Adobe</button>
+        <button class="btn hidden" id="signOutBtn" style="font-size:0.75rem;color:var(--err);">Sign out</button>
+      </div>
     </header>
 
     <!-- Setup Banner -->
@@ -205,6 +210,60 @@ const deepScanPanel = document.getElementById('deepScanPanel');
 const deepScanSummary = document.getElementById('deepScanSummary');
 const deepScanDetails = document.getElementById('deepScanDetails');
 const resultsBody = document.getElementById('resultsBody');
+const signInBtn = document.getElementById('signInBtn');
+const signOutBtn = document.getElementById('signOutBtn');
+const authBadge = document.getElementById('authBadge');
+
+// ── Auth ─────────────────────────────────────────────────
+async function checkAuthStatus() {
+  try {
+    const res = await fetch('/auth/status');
+    const data = await res.json();
+
+    if (data.authenticated) {
+      authBadge.className = 'badge badge-ok';
+      authBadge.textContent = `✅ ${data.user.name || data.user.email}`;
+      signInBtn.classList.add('hidden');
+      signOutBtn.classList.remove('hidden');
+      adobeCloudBtn.disabled = false;
+      adobeCloudBtn.title = `Signed in as ${data.user.email}`;
+      termLog(`Signed in as ${data.user.name} (${data.user.email})`, 'success');
+    } else {
+      authBadge.className = 'badge badge-err';
+      authBadge.textContent = '⚪ Not signed in';
+      signInBtn.classList.remove('hidden');
+      signOutBtn.classList.add('hidden');
+      adobeCloudBtn.disabled = true;
+      adobeCloudBtn.title = 'Sign in with Adobe to use Cloud Auto-Tag';
+    }
+  } catch (err) {
+    // OAuth server not running — use fallback mode
+    authBadge.className = 'badge badge-warn';
+    authBadge.textContent = '⚠️ OAuth server offline';
+    signInBtn.classList.add('hidden');
+    signOutBtn.classList.add('hidden');
+    adobeCloudBtn.disabled = false;
+    adobeCloudBtn.title = 'Using credentials file (fallback mode)';
+  }
+}
+
+signInBtn.addEventListener('click', () => {
+  // Open OAuth login in new window
+  const authWindow = window.open('/auth/login', 'adobe-auth', 'width=600,height=700');
+  authWindow.addEventListener('unload', async () => {
+    // Check auth status when window closes
+    await checkAuthStatus();
+  });
+});
+
+signOutBtn.addEventListener('click', async () => {
+  await fetch('/auth/logout');
+  await checkAuthStatus();
+  termLog('Signed out.', 'warning');
+});
+
+// Check auth on page load
+checkAuthStatus();
 
 // ── Terminal logger ────────────────────────────────────
 function termLog(msg, type = 'info') {

@@ -10,6 +10,18 @@ All project documentation **MUST** live in one of these locations:
 | `CHANGELOG.md` | Chronological record of changes, releases, and notable events |
 | `specs/` | Technical specifications, architecture diagrams, pain points, standards, tasks, plans |
 
+## Auth Endpoints (OAuth)
+
+The OAuth server runs on port 3457 and is proxied through the main server:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /auth/login` | Redirect to Adobe OAuth |
+| `GET /auth/callback` | Handle OAuth callback |
+| `GET /auth/logout` | Log out |
+| `GET /auth/status` | Check auth status |
+| `GET /auth/token` | Get access token (internal) |
+
 ## Prohibited
 
 - ❌ Documentation scattered in arbitrary markdown files at the project root

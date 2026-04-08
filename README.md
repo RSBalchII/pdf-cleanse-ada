@@ -21,6 +21,29 @@ node server.js
 # → opens http://localhost:3456 in your browser
 ```
 
+### Option A: Sign in with Adobe (Non-Developers)
+
+For users without developer credentials:
+
+1. Start the OAuth server in a second terminal:
+   ```bash
+   python adobe_oauth_server.py
+   ```
+2. In the web UI, click **🔐 Sign in with Adobe**
+3. Authenticate with your Adobe ID in the popup
+4. Click **☁️ Adobe Cloud Auto-Tag** — your session is used automatically
+
+### Option B: Developer Credentials
+
+For users with Adobe Developer credentials:
+
+```bash
+# Create credentials file
+echo '{"client_id":"...","client_secret":"..."}' > adobe_credentials.json
+
+# Then click ☁️ Adobe Cloud Auto-Tag in the UI
+```
+
 ## Pipeline Overview
 
 ```
@@ -53,20 +76,35 @@ For PDFs in `needs_review/`, click **☁️ Adobe Cloud Auto-Tag**. This uses th
   needs_review/  →  Adobe API (2-5 min/PDF)  →  adobe_tagged/
 ```
 
-**Credentials setup** (first time):
+**Credentials setup** (choose one method):
+
+### Method A: Browser Sign-In (No Developer Account Needed)
+
+Start the OAuth server:
+```bash
+python adobe_oauth_server.py
+```
+Then click **🔐 Sign in with Adobe** in the web UI. Users authenticate with their regular Adobe ID — no developer project needed.
+
+### Method B: Developer Credentials File
 
 ```bash
-# Option A: Create adobe_credentials.json
+# Create adobe_credentials.json
 echo '{"client_id":"...","client_secret":"..."}' > adobe_credentials.json
-
-# Option B: Environment variables
-export ADOBE_CLIENT_ID="your-client-id"
-export ADOBE_CLIENT_SECRET="your-client-secret"
-
-# Option C: First click of ☁️ button prompts interactively
 ```
 
-Get credentials at: https://developer.adobe.com/console → Create Project → Add PDF Services API
+### Method C: Environment Variables
+
+```bash
+export ADOBE_CLIENT_ID="your-client-id"
+export ADOBE_CLIENT_SECRET="your-client-secret"
+```
+
+### Method D: Interactive Prompt
+
+First click of ☁️ button prompts for credentials interactively, then saves to file.
+
+Get developer credentials at: https://developer.adobe.com/console → Create Project → Add PDF Services API
 
 ### Step 3: Re-Assess & Verify
 
@@ -156,30 +194,27 @@ Adobe auto-tag handles ~90% of structural issues. The remaining checks need manu
 - **Standard:** ~$0.05 per auto-tag operation
 - [Pricing details](https://developer.adobe.com/document-services/pricing/)
 
-## Project Architecture
+## Architecture
 
 ```
-pdf-cleanse-ada/
-├── server.js                 # Express server (port 3456)
-├── index.html                # Web UI (dark theme, drag-drop, SSE terminal)
-├── pdf-tools.js              # Node.js PDF pipeline (upload → fix → sort)
-├── pdf_fix_single.py         # Python metadata fixer (stdin/stdout pipe)
-├── compliance_checker.py     # Deep WCAG/PDF-UA/508 checker (1200+ lines)
-├── deep_scan.py              # Batch compliance scan API
-├── adobe_autotag_api.py      # Adobe Cloud API client (upload → tag → download)
-├── adobe_auto.py             # Adobe Acrobat COM automation (local)
-├── batch_auto_tag.py         # Batch COM auto-tag (local Acrobat)
-├── pipeline.py               # CLI pipeline runner
-│
-├── input_pdfs/               # ← Drop PDFs here
-├── done/                     # ✓ Compliant (metadata fixed, tagged)
-├── needs_review/             # ⚠ Needs Adobe auto-tag
-├── adobe_tagged/             # ← Adobe Cloud tagged PDFs land here
-├── auto_fixed/               # Python auto-fix intermediate
-├── adobe_fixed/              # Adobe COM fix intermediate
-├── pipeline_results/         # CSV reports
-└── assessment_results/       # Deep scan reports
+  Browser UI (port 3456)              OAuth Server (port 3457)         Adobe Cloud
+  ┌─────────────────────┐            ┌─────────────────────┐          ┌─────────────┐
+  │                     │            │                     │          │             │
+  │  Sign in with Adobe │───────────►│  adobe_oauth_       │─────────►│  Adobe IMS  │
+  │  (popup window)     │  redirect  │  server.py          │  OAuth   │  (auth)     │
+  │                     │            │                     │  flow    │             │
+  │  Auth status badge  │◄───────────│  Session store      │◄─────────│  access_    │
+  │  ✅ user@adobe.com  │  cookie    │  (.oauth_sessions)  │  token   │  token      │
+  │                     │            │                     │          │             │
+  │  Cloud Auto-Tag     │───────────►│  /token endpoint    │          │  PDF        │
+  │  (uses session)     │  token     │  (proxied)          │─────────►│  Services   │
+  │                     │            │                     │  API     │  API        │
+  └─────────────────────┘            └─────────────────────┘          └─────────────┘
 ```
+
+**Two auth modes:**
+- **OAuth mode** — Users sign in with Adobe ID (no developer account needed)
+- **Credentials mode** — Uses `adobe_credentials.json` (requires developer project)
 
 ## Pain Points & Lessons Learned
 
@@ -245,6 +280,15 @@ All documentation lives in one of these locations (per [`specs/doc_policy.md`](s
 
 ## API Endpoints
 
+### Auth Endpoints (OAuth)
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/auth/login` | Redirect to Adobe OAuth (proxied to port 3457) |
+| `GET` | `/auth/callback` | Handle OAuth callback |
+| `GET` | `/auth/logout` | Log out and clear session |
+| `GET` | `/auth/status` | Check auth status (JSON) |
+
+### Application Endpoints
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Web UI |
@@ -253,7 +297,7 @@ All documentation lives in one of these locations (per [`specs/doc_policy.md`](s
 | `POST` | `/api/upload` | Upload PDF(s) |
 | `GET` | `/api/files` | List uploaded PDFs |
 | `POST` | `/api/process` | Run metadata fix pipeline |
-| `POST` | `/api/adobe-autotag` | Run Adobe Cloud auto-tag |
+| `POST` | `/api/adobe-autotag` | Run Adobe Cloud auto-tag (OAuth or credentials) |
 | `POST` | `/api/deep-scan` | Run deep compliance scan |
 | `POST` | `/api/auto-tag` | Open PDF in Acrobat (COM) |
 | `POST` | `/api/re-assess` | Re-check compliance on single PDF |

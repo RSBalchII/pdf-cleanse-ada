@@ -27,6 +27,8 @@ input_pdfs/
 
 # Secrets (credentials get created interactively)
 adobe_credentials.json
+adobe_oauth_config.json
+.oauth_sessions.json
 
 # Temp / misc
 triage_report.csv

@@ -45,16 +45,26 @@ REPORT_PATH = OUTPUT_DIR / "adobe_auto_tag_report.json"
 class AdobeAPI:
     """Handles Adobe PDF Services API authentication and operations."""
 
-    def __init__(self, client_id: str, client_secret: str):
+    def __init__(self, client_id: str = None, client_secret: str = None):
         self.client_id = client_id
         self.client_secret = client_secret
         self.access_token = None
         self.token_expires = 0
         self.session = requests.Session()
-        self.session.headers.update({"x-api-key": client_id})
+        if client_id:
+            self.session.headers.update({"x-api-key": client_id})
 
     def get_token(self) -> str:
         """Get or refresh OAuth access token."""
+        # If token is provided via env var (OAuth flow), use it directly
+        env_token = os.environ.get("ADOBE_ACCESS_TOKEN")
+        if env_token and not self.access_token:
+            self.access_token = env_token
+            self.token_expires = time.time() + 3600
+            self.session.headers.update({"Authorization": f"Bearer {self.access_token}"})
+            print("  ✅ Using OAuth token from session")
+            return self.access_token
+
         if self.access_token and time.time() < self.token_expires - 60:
             return self.access_token
 
