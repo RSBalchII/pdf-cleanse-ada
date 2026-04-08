@@ -1,10 +1,10 @@
 # Project Plan
 
-## Current Phase: Adobe Cloud Auto-Tag Integration
+## Current Phase: Final Delivery
 
-**Goal:** Programmatically auto-tag all untagged PDFs using Adobe's official PDF Services API, achieving full WCAG/PDF-UA/Section 508 compliance with minimal human intervention.
+**Goal:** Deliver all 19 PDFs with full ADA compliance, document the process, and establish repeatable workflow.
 
-**Status:** Infrastructure built, awaiting credentials to run.
+**Status:** 19/19 PDFs processed. 13 fully compliant, 6 need Acrobat Pro Auto-Tag.
 
 ---
 
@@ -23,47 +23,51 @@
 
 ---
 
-## Phase 2: Structural Auto-Tagging 🔄 IN PROGRESS
+## Phase 2: Structural Auto-Tagging ✅ PARTIALLY COMPLETE
 
 **What:** Use Adobe Cloud API to add structure trees to untagged PDFs.
 
-**Infrastructure Built:**
-- `adobe_autotag_api.py` — Full Adobe API client (auth, upload, tag, download)
-- Server endpoint `/api/adobe-autotag` — Web UI integration
-- UI button ☁️ Adobe Cloud Auto-Tag
-- Post-tagging verification via pikepdf
-- `adobe_tagged/` output directory
+**Findings:**
+- ✅ Adobe Cloud API works correctly (auth, upload, tag, download all functional)
+- ✅ 4 PDFs successfully auto-tagged with full structure tree
+- ⚠️ Free tier quota exhausted after initial batch
+- ⚠️ Acrobat Pro COM auto-tag blocked by Acrobat security (cannot trigger `TouchUp_AutoTag` programmatically)
 
-**Awaiting:** Adobe Developer credentials (client_id + client_secret)
-
-**Estimated Runtime:** 2-5 minutes per PDF × 6 PDFs = 12-30 minutes
+**Remaining:**
+- 6 PDFs need Acrobat Pro Auto-Tag via UI (Action Wizard recommended for batch)
+- No code changes needed — Acrobat Pro Action Wizard handles this
 
 ---
 
-## Phase 3: Verification & Reporting ⏳ PENDING
+## Phase 3: Verification & Reporting ⏳ IN PROGRESS
 
 **What:** Verify tagged PDFs pass accessibility checks and generate final report.
 
-**Steps:**
-1. Run Acrobat Accessibility Checker on each `adobe_tagged/` PDF
-2. Record pass/fail counts per PDF
-3. Generate Excel report with before/after comparison
-4. Identify remaining human-review items (alt text quality, reading order)
-5. Deliver cleaned PDFs + report
+**Completed:**
+- All 4 Cloud-tagged PDFs verified with pikepdf (StructTreeRoot present, Lang set, Marked=true)
+- All 19 PDFs copied to `Downloads/ADA_Cleaned/`
+- CSV reports generated in `pipeline_results/`
 
-**Expected Outcome:** ~90% of issues auto-resolved, ~10% require manual review.
+**Remaining:**
+- [ ] Re-assess all 19 PDFs after remaining 6 get Auto-Tagged via Acrobat Pro
+- [ ] Generate final Excel report with before/after comparison
 
 ---
 
-## Phase 4: Production Deployment ⏳ PENDING
+## Phase 4: Production Documentation ⏳ IN PROGRESS
 
-**What:** Package and deploy for ongoing use.
+**What:** Document the complete workflow for ongoing use.
 
-**Steps:**
-1. Dockerize the application
-2. Set up CI/CD with Playwright MCP tests
-3. Document credential management
-4. Create user guide for non-technical users
+**Completed:**
+- README.md with full documentation
+- CHANGELOG.md with chronological change history
+- `specs/standards/` — 7 numbered standards
+- `specs/spec.md` — Architecture diagrams
+- `specs/doc_policy.md` — Documentation policy
+
+**Remaining:**
+- [ ] Add Acrobat Pro Action Wizard guide
+- [ ] Add user guide for non-technical operators
 
 ---
 
@@ -72,7 +76,8 @@
 | Decision | Rationale |
 |----------|-----------|
 | Python/pikepdf over pdf-lib for catalog mods | pdf-lib cannot reliably write MarkInfo, ViewerPreferences, StructTreeRoot |
-| Adobe Cloud API over COM automation | COM is unreliable (async, no callbacks, silent crashes, visibility required) |
+| Adobe Cloud API over COM automation | COM is blocked by Acrobat security; Cloud API works but has quota |
+| Credentials file over OAuth | Simpler for single-user setup; OAuth adds complexity with no benefit for this use case |
 | Zero auto-fixable = "done" | Human-review issues are not failures; they require judgment by definition |
 | Raw binary scanning for detection | pdf-lib hides catalog entries; regex on binary buffer works reliably |
 | pikepdf `_is_array`/`_is_dict` helpers | pikepdf types don't match Python list/dict; `.get()` throws on Array |
@@ -84,8 +89,9 @@
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Adobe API credentials expire | Medium | Token auto-refresh built in; credentials saved to file |
+| Adobe Cloud API quota exhausted | Medium | Use Acrobat Pro Action Wizard (unlimited, local) |
+| Acrobat Pro trial expires (6 days) | High | Purchase license or use Cloud API when quota resets |
 | Adobe auto-tag generates poor alt text | Low | Human review step; alt text can be edited in Acrobat |
 | Large PDFs timeout on Adobe API | Low | 600s timeout; most PDFs complete in 2-5 min |
-| API cost exceeds budget | Low | Free tier: 500 ops/month; 6 PDFs = 6 ops |
+| API cost exceeds budget | Low | Free tier: 500 ops/month; Acrobat Pro Action Wizard is unlimited |
 | pikepdf version incompatibility | Low | Pinned `>=9.0.0`; tested on current version |

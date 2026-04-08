@@ -365,7 +365,12 @@ def main():
         print(f"  • {p.name} ({size:.1f} KB)")
 
     print(f"\n⏳ Estimated: ~2-5 minutes per PDF depending on size")
-    confirm = input(f"\nProcess {len(pdf_files)} PDF(s)? (y/n): ").strip().lower()
+    
+    if len(sys.argv) > 1 and sys.argv[1] == '--auto':
+        confirm = 'y'
+        print(f"\nAuto-confirming: Processing {len(pdf_files)} PDF(s)...")
+    else:
+        confirm = input(f"\nProcess {len(pdf_files)} PDF(s)? (y/n): ").strip().lower()
     if confirm != "y":
         print("Aborted.")
         return

@@ -76,35 +76,32 @@ For PDFs in `needs_review/`, click **☁️ Adobe Cloud Auto-Tag**. This uses th
   needs_review/  →  Adobe API (2-5 min/PDF)  →  adobe_tagged/
 ```
 
-**Credentials setup** (choose one method):
+**Credentials setup:**
 
-### Method A: Browser Sign-In (No Developer Account Needed)
-
-Start the OAuth server:
-```bash
-python adobe_oauth_server.py
-```
-Then click **🔐 Sign in with Adobe** in the web UI. Users authenticate with their regular Adobe ID — no developer project needed.
-
-### Method B: Developer Credentials File
+### Method 1: Developer Credentials File (Recommended)
 
 ```bash
 # Create adobe_credentials.json
 echo '{"client_id":"...","client_secret":"..."}' > adobe_credentials.json
 ```
 
-### Method C: Environment Variables
+### Method 2: Environment Variables
 
 ```bash
 export ADOBE_CLIENT_ID="your-client-id"
 export ADOBE_CLIENT_SECRET="your-client-secret"
 ```
 
-### Method D: Interactive Prompt
+### Method 3: Interactive Prompt
 
 First click of ☁️ button prompts for credentials interactively, then saves to file.
 
 Get developer credentials at: https://developer.adobe.com/console → Create Project → Add PDF Services API
+
+**Note on Quota:** Adobe Cloud API free tier has limited quota (~4-10 auto-tag operations). When exhausted, use **Acrobat Pro Action Wizard** (unlimited, no quota):
+1. Open Acrobat Pro → `Tools > Action Wizard > New Action`
+2. Add "Make Accessible" step
+3. Run on folder of PDFs
 
 ### Step 3: Re-Assess & Verify
 
@@ -197,24 +194,22 @@ Adobe auto-tag handles ~90% of structural issues. The remaining checks need manu
 ## Architecture
 
 ```
-  Browser UI (port 3456)              OAuth Server (port 3457)         Adobe Cloud
-  ┌─────────────────────┐            ┌─────────────────────┐          ┌─────────────┐
-  │                     │            │                     │          │             │
-  │  Sign in with Adobe │───────────►│  adobe_oauth_       │─────────►│  Adobe IMS  │
-  │  (popup window)     │  redirect  │  server.py          │  OAuth   │  (auth)     │
-  │                     │            │                     │  flow    │             │
-  │  Auth status badge  │◄───────────│  Session store      │◄─────────│  access_    │
-  │  ✅ user@adobe.com  │  cookie    │  (.oauth_sessions)  │  token   │  token      │
-  │                     │            │                     │          │             │
-  │  Cloud Auto-Tag     │───────────►│  /token endpoint    │          │  PDF        │
-  │  (uses session)     │  token     │  (proxied)          │─────────►│  Services   │
-  │                     │            │                     │  API     │  API        │
-  └─────────────────────┘            └─────────────────────┘          └─────────────┘
+  Browser UI (port 3456)              Adobe Cloud
+  ┌─────────────────────┐            ┌──────────────────┐
+  │                     │            │                  │
+  │  Adobe Credentials  │            │  Adobe IMS       │
+  │  (adobe_credentials │───────────►│  (auth)          │
+  │   .json)            │  token     │                  │
+  │                     │            │                  │
+  │  Cloud Auto-Tag     │───────────►│  PDF Services    │
+  │  (REST API)         │  upload/   │  API             │
+  │                     │  tag/down  │                  │
+  └─────────────────────┘            └──────────────────┘
 ```
 
-**Two auth modes:**
-- **OAuth mode** — Users sign in with Adobe ID (no developer account needed)
-- **Credentials mode** — Uses `adobe_credentials.json` (requires developer project)
+**Auth modes:**
+- **Developer credentials** — `adobe_credentials.json` with client_id/client_secret
+- **Environment variables** — `ADOBE_CLIENT_ID` / `ADOBE_CLIENT_SECRET`
 
 ## Pain Points & Lessons Learned
 
@@ -280,15 +275,6 @@ All documentation lives in one of these locations (per [`specs/doc_policy.md`](s
 
 ## API Endpoints
 
-### Auth Endpoints (OAuth)
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/auth/login` | Redirect to Adobe OAuth (proxied to port 3457) |
-| `GET` | `/auth/callback` | Handle OAuth callback |
-| `GET` | `/auth/logout` | Log out and clear session |
-| `GET` | `/auth/status` | Check auth status (JSON) |
-
-### Application Endpoints
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | Web UI |
@@ -297,7 +283,7 @@ All documentation lives in one of these locations (per [`specs/doc_policy.md`](s
 | `POST` | `/api/upload` | Upload PDF(s) |
 | `GET` | `/api/files` | List uploaded PDFs |
 | `POST` | `/api/process` | Run metadata fix pipeline |
-| `POST` | `/api/adobe-autotag` | Run Adobe Cloud auto-tag (OAuth or credentials) |
+| `POST` | `/api/adobe-autotag` | Run Adobe Cloud auto-tag (credentials file) |
 | `POST` | `/api/deep-scan` | Run deep compliance scan |
 | `POST` | `/api/auto-tag` | Open PDF in Acrobat (COM) |
 | `POST` | `/api/re-assess` | Re-check compliance on single PDF |

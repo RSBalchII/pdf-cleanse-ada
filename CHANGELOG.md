@@ -5,32 +5,28 @@ All notable changes to the PDF ADA Compliance Processor.
 ## [Unreleased]
 
 ### Added
-- Adobe Cloud API auto-tag integration (`adobe_autotag_api.py`)
-- Web UI button ☁️ Adobe Cloud Auto-Tag
-- Server endpoint `POST /api/adobe-autotag`
-- Playwright MCP browser automation configuration
-- `specs/` documentation directory with standards, diagrams, and planning
-- `specs/standards/` — 7 numbered standards documenting pain points and fixes
-- `specs/spec.md` — Architecture diagrams (ASCII art)
-- `specs/tasks.md` — Task tracker
-- `specs/plan.md` — Project plan and risk register
-- `specs/doc_policy.md` — Documentation policy
-- CHANGELOG.md
-- `.gitignore` for clean repository
+- `--auto` flag for `adobe_autotag_api.py` (non-interactive batch mode)
+- `--auto` flag for `batch_auto_tag_acrobat.py` (non-interactive batch mode)
+- `batch_auto_tag_acrobat.py` — Acrobat Pro COM batch processor
 
 ### Fixed
-- pdf-lib catalog access → switched to Python/pikepdf subprocess (Standard 001)
-- pikepdf Array/Dict traversal crashes → `_is_array()`/`_is_dict()` helpers (Standard 002)
-- Adobe COM automation unreliability → Adobe Cloud API as primary path (Standard 003)
-- URL-encoded filename 404s → dual search with `decodeURIComponent` (Standard 004)
-- Manual browser testing slowness → Playwright MCP (Standard 005)
-- PDF language BOM markers → raw regex with BOM stripping (Standard 006)
-- Pipeline sort logic → zero auto-fixable = compliant (Standard 007)
+- Windows console emoji encoding in `adobe_autotag_api.py` and `batch_auto_tag_acrobat.py`
+- Auth scope format: `openid AdobeID DCAPI` (space-separated, not comma-separated)
+- Server simplified: removed OAuth proxy routes, direct credentials check
+- UI auth badge simplified: shows credentials status (no OAuth dependency)
 
 ### Changed
-- README.md updated with full documentation and Adobe integration details
-- Pain points section removed from README (moved to `specs/standards/`)
-- `AUTO_TAGGED_DIR` added to pipeline directories
+- **Adobe Cloud API** — tested and verified working; 4/19 PDFs successfully auto-tagged
+- **Cloud quota exhausted** after initial batch (free tier limit reached)
+- **Acrobat Pro COM** — verified `TouchUp_AutoTag` cannot be triggered programmatically (Acrobat security restriction)
+- Removed unused OAuth server files (`adobe_oauth_server.py`, `adobe_oauth_config.json`, `start_oauth.bat`, `batch_auto_tag.py`)
+- Updated README.md with quota findings and Acrobat Pro Action Wizard recommendation
+
+### Results (Session 2026-04-07)
+- 4 PDFs successfully auto-tagged via Adobe Cloud API (with full structure tree)
+- 9 PDFs already tagged (metadata fixed by pipeline)
+- 6 PDFs need Acrobat Pro Auto-Tag (quota exhausted)
+- All 19 PDFs delivered to `Downloads/ADA_Cleaned/`
 
 ## [0.1.0] — 2026-04-07
 
@@ -44,4 +40,16 @@ All notable changes to the PDF ADA Compliance Processor.
 - Re-Assess endpoint for before/after comparison
 - Adobe Acrobat COM automation (fallback)
 - Raw binary PDF scanner for catalog detection
-- 19 PDFs processed: 13 compliant, 6 need Adobe auto-tag
+- `specs/` documentation directory with standards, diagrams, and planning
+- `specs/standards/` — 7 numbered standards documenting pain points and fixes
+- Playwright MCP browser automation configuration
+- `.gitignore` for clean repository
+
+### Fixed
+- pdf-lib catalog access → switched to Python/pikepdf subprocess (Standard 001)
+- pikepdf Array/Dict traversal crashes → `_is_array()`/`_is_dict()` helpers (Standard 002)
+- Adobe COM automation unreliability → Adobe Cloud API as primary path (Standard 003)
+- URL-encoded filename 404s → dual search with `decodeURIComponent` (Standard 004)
+- Manual browser testing slowness → Playwright MCP (Standard 005)
+- PDF language BOM markers → raw regex with BOM stripping (Standard 006)
+- Pipeline sort logic → zero auto-fixable = compliant (Standard 007)
