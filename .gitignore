@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+
+# Node
+node_modules/
+package-lock.json
+
+# Generated output
+done/
+needs_review/
+auto_fixed/
+adobe_fixed/
+adobe_tagged/
+adobe_reports/
+assessment_results/
+pipeline_results/
+fix_logs/
+staged_compliance/
+vision_results/
+
+# Uploaded input (keep repo clean)
+input_pdfs/
+
+# Secrets (credentials get created interactively)
+adobe_credentials.json
+
+# Temp / misc
+triage_report.csv
+crawl-clean-replace.py
+*.log

@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF ADA Compliance Processor</title>
+  <style>
+    :root {
+      --bg: #0d1117; --surface: #161b22; --border: #30363d; --text: #c9d1d9;
+      --text2: #8b949e; --accent: #58a6ff; --ok: #3fb950; --warn: #d29922;
+      --err: #f85149; --purple: #a371f7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    .container { max-width: 1400px; margin: 0 auto; padding: 1rem; }
+    header { text-align: center; padding: 1.5rem 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+    header h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    header p { color: var(--text2); font-size: 0.875rem; }
+
+    .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 768px) { .main-grid { grid-template-columns: 1fr; } }
+
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; }
+    .panel-title { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+
+    /* Setup Banner */
+    .setup-banner { background: var(--warn); color: #000; padding: 1rem; border-radius: 8px; text-align: center; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .setup-banner.ready { background: var(--ok); }
+    .setup-banner.hidden { display: none; }
+    .btn-setup { background: #000; color: #fff; border: none; padding: 0.5rem 1.5rem; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.875rem; }
+    .btn-setup:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Upload Area */
+    .upload-area { border: 2px dashed var(--border); border-radius: 8px; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 1rem; }
+    .upload-area:hover, .upload-area.dragover { border-color: var(--accent); background: rgba(88,166,255,0.05); }
+    .upload-area p { color: var(--text2); }
+    .upload-area .icon { font-size: 2rem; margin-bottom: 0.5rem; }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.5rem 1rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 0.8125rem; font-weight: 500; cursor: pointer; transition: background 0.15s; }
+    .btn:hover { background: var(--border); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #409eff; }
+    .btn-success { background: var(--ok); border-color: var(--ok); color: #fff; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-group { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+
+    /* File List */
+    .file-list { max-height: 200px; overflow-y: auto; }
+    .file-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 0.35rem; background: var(--bg); font-size: 0.8125rem; }
+    .file-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-item-size { color: var(--text2); font-size: 0.75rem; }
+    .file-remove { background: none; border: none; color: var(--text2); cursor: pointer; padding: 0.25rem; }
+    .file-remove:hover { color: var(--err); }
+
+    /* Terminal */
+    .terminal { background: #000; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; font-family: 'Consolas', 'SF Mono', monospace; font-size: 0.75rem; height: 300px; overflow-y: auto; line-height: 1.5; }
+    .terminal .line { white-space: pre-wrap; word-break: break-word; margin-bottom: 0.15rem; }
+    .terminal .info { color: var(--text); }
+    .terminal .success { color: var(--ok); }
+    .terminal .warning { color: var(--warn); }
+    .terminal .error { color: var(--err); }
+    .terminal .accent { color: var(--accent); }
+    .terminal .bold { font-weight: 600; color: var(--text); }
+    .terminal .dim { color: var(--text2); }
+
+    /* Progress */
+    .progress { margin-top: 0.75rem; }
+    .progress-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--purple)); width: 0%; transition: width 0.3s; }
+    .progress-text { font-size: 0.75rem; color: var(--text2); margin-top: 0.35rem; display: flex; justify-content: space-between; }
+
+    /* Summary Cards */
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-top: 1rem; }
+    .summary-card { background: var(--border); border-radius: 6px; padding: 0.75rem; text-align: center; }
+    .summary-card .value { font-size: 1.25rem; font-weight: 700; }
+    .summary-card .label { font-size: 0.6875rem; color: var(--text2); margin-top: 0.15rem; }
+
+    /* Results Table */
+    .results-table { width: 100%; border-collapse: collapse; margin-top: 0.75rem; font-size: 0.8125rem; }
+    .results-table th, .results-table td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+    .results-table th { font-weight: 600; color: var(--text2); background: var(--border); }
+    .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 99px; font-size: 0.6875rem; font-weight: 500; }
+    .badge-ok { background: rgba(63,185,80,0.2); color: var(--ok); }
+    .badge-warn { background: rgba(210,153,34,0.2); color: var(--warn); }
+    .badge-err { background: rgba(248,81,73,0.2); color: var(--err); }
+
+    .hidden { display: none !important; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📄 PDF ADA Compliance Processor</h1>
+      <p>Accessibility assessment and remediation for WCAG/PDF-UA compliance</p>
+    </header>
+
+    <!-- Setup Banner -->
+    <div class="setup-banner" id="setupBanner">
+      <span id="setupText">⚙️ First time? Click <strong>Setup</strong> to install dependencies.</span>
+      <button class="btn-setup" id="setupBtn">Install Dependencies</button>
+    </div>
+
+    <div class="main-grid">
+      <!-- Left: Upload & Process -->
+      <div>
+        <div class="panel">
+          <div class="panel-title">📂 Upload PDFs</div>
+          <div class="upload-area" id="uploadArea">
+            <div class="icon">📁</div>
+            <p><strong>Drop PDFs here</strong> or click to browse</p>
+            <p style="font-size:0.75rem;">Supports single or multiple files</p>
+          </div>
+          <input type="file" id="fileInput" accept=".pdf" multiple style="display:none">
+
+          <div class="file-list" id="fileList"></div>
+
+          <div class="btn-group">
+            <button class="btn" id="browseBtn">Browse Files</button>
+            <button class="btn" id="refreshBtn">Refresh List</button>
+            <button class="btn-primary" id="processBtn" disabled>▶ Process All PDFs</button>
+            <button class="btn" id="adobeCloudBtn" style="background:#ff0000;border-color:#ff0000;color:#fff;" disabled>☁️ Adobe Cloud Auto-Tag</button>
+            <button class="btn" id="deepScanBtn" style="background:var(--purple);border-color:var(--purple);color:#fff;" disabled>🔍 Deep Scan (Python)</button>
+          </div>
+
+          <div class="progress hidden" id="progressContainer">
+            <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+            <div class="progress-text">
+              <span id="progressLabel">Processing...</span>
+              <span id="progressPercent">0%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Download Results -->
+        <div class="panel hidden" id="downloadPanel" style="margin-top:1rem;">
+          <div class="panel-title">📥 Results</div>
+          <div class="btn-group">
+            <button class="btn" id="downloadReportBtn">Download CSV Report</button>
+            <button class="btn" id="downloadDoneBtn">Download Compliant PDFs</button>
+            <button class="btn" id="downloadReviewBtn">Download Review PDFs</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Terminal & Results -->
+      <div>
+        <div class="panel">
+          <div class="panel-title">💻 Terminal Output</div>
+          <div class="terminal" id="terminal">
+            <div class="line dim">Waiting for connection...</div>
+          </div>
+        </div>
+
+        <!-- Results Table -->
+        <div class="panel hidden" id="resultsPanel" style="margin-top:1rem;">
+          <div class="panel-title">📊 Results Summary</div>
+          <div class="summary-grid" id="summaryGrid"></div>
+          <table class="results-table" id="resultsTable">
+            <thead><tr><th>File</th><th>Status</th><th>Issues Before</th><th>Issues After</th><th>Fixes</th><th>Action</th></tr></thead>
+            <tbody id="resultsBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Deep Scan Results -->
+        <div class="panel hidden" id="deepScanPanel" style="margin-top:1rem;">
+          <div class="panel-title">🔍 Deep Scan Results (Python Compliance Checker)</div>
+          <div class="summary-grid" id="deepScanSummary"></div>
+          <div id="deepScanDetails"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ── State ──────────────────────────────────────────────
+let uploadedFiles = [];
+let isSetup = false;
+let isProcessing = false;
+
+// ── DOM refs ───────────────────────────────────────────
+const setupBanner = document.getElementById('setupBanner');
+const setupBtn = document.getElementById('setupBtn');
+const setupText = document.getElementById('setupText');
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+const browseBtn = document.getElementById('browseBtn');
+const refreshBtn = document.getElementById('refreshBtn');
+const fileList = document.getElementById('fileList');
+const processBtn = document.getElementById('processBtn');
+const adobeCloudBtn = document.getElementById('adobeCloudBtn');
+const deepScanBtn = document.getElementById('deepScanBtn');
+const progressContainer = document.getElementById('progressContainer');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
+const progressPercent = document.getElementById('progressPercent');
+const downloadPanel = document.getElementById('downloadPanel');
+const terminal = document.getElementById('terminal');
+const resultsPanel = document.getElementById('resultsPanel');
+const summaryGrid = document.getElementById('summaryGrid');
+const deepScanPanel = document.getElementById('deepScanPanel');
+const deepScanSummary = document.getElementById('deepScanSummary');
+const deepScanDetails = document.getElementById('deepScanDetails');
+const resultsBody = document.getElementById('resultsBody');
+
+// ── Terminal logger ────────────────────────────────────
+function termLog(msg, type = 'info') {
+  const line = document.createElement('div');
+  line.className = `line ${type}`;
+  line.textContent = msg;
+  terminal.appendChild(line);
+  terminal.scrollTop = terminal.scrollHeight;
+}
+
+// ── Connect SSE terminal stream ────────────────────────
+function connectTerminal() {
+  const evtSource = new EventSource('/terminal-stream');
+  evtSource.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    termLog(data.message, data.type);
+  };
+  evtSource.onerror = () => {
+    termLog('Terminal disconnected. Reconnecting...', 'warning');
+    setTimeout(connectTerminal, 3000);
+  };
+}
+
+// ── Setup ──────────────────────────────────────────────
+setupBtn.addEventListener('click', async () => {
+  setupBtn.disabled = true;
+  setupBtn.textContent = 'Installing...';
+  termLog('Starting dependency installation...', 'accent');
+
+  try {
+    const res = await fetch('/api/setup', { method: 'POST' });
+    const data = await res.json();
+
+    if (data.success) {
+      isSetup = true;
+      setupBanner.classList.add('ready');
+      setupText.innerHTML = '✅ All dependencies installed. Project is ready!';
+      setupBtn.textContent = 'Done';
+      setupBtn.classList.add('btn-success');
+      termLog('Setup complete!', 'success');
+    } else {
+      termLog(`Setup failed: ${data.error}`, 'error');
+      setupBtn.disabled = false;
+      setupBtn.textContent = 'Retry Setup';
+    }
+  } catch (err) {
+    termLog(`Setup error: ${err.message}`, 'error');
+    setupBtn.disabled = false;
+    setupBtn.textContent = 'Retry Setup';
+  }
+});
+
+// ── File upload ────────────────────────────────────────
+uploadArea.addEventListener('click', () => fileInput.click());
+browseBtn.addEventListener('click', () => fileInput.click());
+
+uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  uploadArea.classList.remove('dragover');
+  const files = Array.from(e.dataTransfer.files);
+  await uploadFiles(files);
+});
+
+fileInput.addEventListener('change', async () => {
+  const files = Array.from(fileInput.files);
+  await uploadFiles(files);
+  fileInput.value = '';
+});
+
+async function uploadFiles(files) {
+  const pdfs = files.filter(f => f.name.endsWith('.pdf'));
+  if (!pdfs.length) { termLog('No PDF files selected.', 'warning'); return; }
+
+  const formData = new FormData();
+  pdfs.forEach(f => formData.append('pdfs', f));
+
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (data.success) {
+      termLog(`Uploaded ${data.count} PDF(s).`, 'success');
+      await refreshFileList();
+    }
+  } catch (err) {
+    termLog(`Upload failed: ${err.message}`, 'error');
+  }
+}
+
+async function refreshFileList() {
+  try {
+    const res = await fetch('/api/files');
+    const data = await res.json();
+    uploadedFiles = data.files || [];
+    renderFileList();
+  } catch (err) {
+    termLog(`Failed to list files: ${err.message}`, 'error');
+  }
+}
+
+refreshBtn.addEventListener('click', refreshFileList);
+
+function renderFileList() {
+  fileList.innerHTML = '';
+  if (!uploadedFiles.length) {
+    fileList.innerHTML = '<div class="line dim" style="padding:0.5rem;text-align:center;">No files uploaded yet.</div>';
+    processBtn.disabled = true;
+    return;
+  }
+  uploadedFiles.forEach(f => {
+    const div = document.createElement('div');
+    div.className = 'file-item';
+    div.innerHTML = `<span class="file-item-name">📄 ${f.name}</span><span class="file-item-size">${(f.size / 1024).toFixed(1)} KB</span>`;
+    fileList.appendChild(div);
+  });
+  processBtn.disabled = false;
+  adobeCloudBtn.disabled = false;
+  deepScanBtn.disabled = false;
+}
+
+// ── Adobe Cloud Auto-Tag ───────────────────────────────
+let isAdobeProcessing = false;
+adobeCloudBtn.addEventListener('click', async () => {
+  if (isAdobeProcessing) return;
+  isAdobeProcessing = true;
+  adobeCloudBtn.disabled = true;
+  adobeCloudBtn.textContent = '☁️ Uploading to Adobe...';
+  progressContainer.classList.remove('hidden');
+  resultsPanel.classList.add('hidden');
+
+  termLog('━'.repeat(60), 'accent');
+  termLog('Starting Adobe Cloud Auto-Tag Pipeline', 'bold');
+  termLog('━'.repeat(60), 'accent');
+  termLog('PDFs will be uploaded to Adobe API, auto-tagged, and downloaded.', 'info');
+  termLog('Each PDF takes ~2-5 minutes depending on size.', 'info');
+  termLog('━'.repeat(60), 'accent');
+
+  progressFill.style.width = '30%';
+  progressLabel.textContent = 'Uploading to Adobe...';
+  progressPercent.textContent = '30%';
+
+  try {
+    const res = await fetch('/api/adobe-autotag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await res.json();
+
+    progressFill.style.width = '100%';
+    progressLabel.textContent = 'Complete!';
+    progressPercent.textContent = '100%';
+
+    if (data.success || data.output?.includes('BATCH AUTO-TAG COMPLETE')) {
+      termLog('Adobe Cloud Auto-Tag pipeline complete!', 'success');
+    } else {
+      termLog(`Adobe pipeline returned: ${JSON.stringify(data)}`, 'warning');
+    }
+  } catch (err) {
+    termLog(`Adobe Cloud error: ${err.message}`, 'error');
+  } finally {
+    isAdobeProcessing = false;
+    adobeCloudBtn.disabled = false;
+    adobeCloudBtn.textContent = '☁️ Adobe Cloud Auto-Tag';
+  }
+});
+
+// ── Process ────────────────────────────────────────────
+processBtn.addEventListener('click', async () => {
+  if (isProcessing) return;
+  isProcessing = true;
+  processBtn.disabled = true;
+  processBtn.textContent = 'Processing...';
+  progressContainer.classList.remove('hidden');
+  resultsPanel.classList.add('hidden');
+  downloadPanel.classList.add('hidden');
+
+  termLog('━'.repeat(60), 'accent');
+  termLog('Starting pipeline...', 'bold');
+  termLog('━'.repeat(60), 'accent');
+
+  progressFill.style.width = '30%';
+  progressLabel.textContent = 'Processing PDFs...';
+  progressPercent.textContent = '30%';
+
+  try {
+    const res = await fetch('/api/process', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    const data = await res.json();
+
+    progressFill.style.width = '100%';
+    progressLabel.textContent = 'Complete!';
+    progressPercent.textContent = '100%';
+
+    if (data.success) {
+      showResults(data.results);
+      downloadPanel.classList.remove('hidden');
+    } else {
+      termLog(`Processing failed: ${data.message || 'Unknown error'}`, 'error');
+    }
+  } catch (err) {
+    termLog(`Processing error: ${err.message}`, 'error');
+  } finally {
+    isProcessing = false;
+    processBtn.disabled = false;
+    processBtn.textContent = '▶ Process All PDFs';
+    await refreshFileList();
+  }
+});
+
+// ── Results ────────────────────────────────────────────
+function showResults(results) {
+  resultsPanel.classList.remove('hidden');
+  resultsBody.innerHTML = '';
+
+  const compliant = results.filter(r => r.status === 'compliant').length;
+  const needsReview = results.filter(r => r.status === 'needs_review').length;
+  const totalFixes = results.reduce((sum, r) => sum + (r.fixesApplied?.length || 0), 0);
+
+  summaryGrid.innerHTML = `
+    <div class="summary-card"><div class="value" style="color:var(--text)">${results.length}</div><div class="label">Processed</div></div>
+    <div class="summary-card"><div class="value" style="color:var(--ok)">${compliant}</div><div class="label">Compliant</div></div>
+    <div class="summary-card"><div class="value" style="color:var(--warn)">${needsReview}</div><div class="label">Needs Review</div></div>
+    <div class="summary-card"><div class="value" style="color:var(--accent)">${totalFixes}</div><div class="label">Fixes Applied</div></div>
+  `;
+
+  results.forEach(r => {
+    const tr = document.createElement('tr');
+    const badgeClass = r.status === 'compliant' ? 'badge-ok' : 'badge-warn';
+    const badgeText = r.status === 'compliant' ? '✓ Compliant' : '⚠ Needs Review';
+    const autoTagBtn = r.status === 'needs_review'
+      ? `<button class="btn" style="font-size:0.6875rem;padding:0.2rem 0.5rem;" onclick="autoTag('${r.fileName}')">🔧 Auto-Tag</button>`
+      : '';
+    const reAssessBtn = `<button class="btn" style="font-size:0.6875rem;padding:0.2rem 0.5rem;" onclick="reAssess('${r.fileName}', this)">🔄 Re-Assess</button>`;
+    tr.innerHTML = `
+      <td>${r.fileName}</td>
+      <td><span class="badge ${badgeClass}" id="badge-${r.fileName.replace(/[^a-zA-Z0-9]/g, '')}">${badgeText}</span></td>
+      <td id="before-${r.fileName.replace(/[^a-zA-Z0-9]/g, '')}">${r.issuesBefore}</td>
+      <td id="after-${r.fileName.replace(/[^a-zA-Z0-9]/g, '')}">${r.issuesAfter}</td>
+      <td style="font-size:0.75rem;color:var(--text2)">${r.fixesApplied?.join('; ') || 'None'}</td>
+      <td>${autoTagBtn} ${reAssessBtn}</td>
+    `;
+    resultsBody.appendChild(tr);
+  });
+}
+
+// ── Auto-Tag in Acrobat ────────────────────────────────
+async function autoTag(fileName) {
+  termLog(`Opening ${fileName} in Acrobat for auto-tagging...`, 'accent');
+  try {
+    const res = await fetch('/api/auto-tag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName })
+    });
+    const data = await res.json();
+    if (data.success) {
+      termLog(data.message, 'success');
+    } else {
+      termLog(`Auto-tag failed: ${data.error}`, 'error');
+    }
+  } catch (err) {
+    termLog(`Auto-tag error: ${err.message}`, 'error');
+  }
+}
+
+// ── Re-Assess After Auto-Tag ───────────────────────────
+async function reAssess(fileName, btnEl) {
+  btnEl.disabled = true;
+  btnEl.textContent = 'Scanning...';
+  termLog(`Re-assessing ${fileName} after Adobe auto-tag...`, 'accent');
+
+  try {
+    const res = await fetch('/api/re-assess', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      const r = data.result;
+      const idSafe = fileName.replace(/[^a-zA-Z0-9]/g, '');
+      const failed = r.failed || 0;
+      const passed = r.passed || 0;
+
+      // Update the badge and counts
+      const badge = document.getElementById(`badge-${idSafe}`);
+      const afterCell = document.getElementById(`after-${idSafe}`);
+      if (badge) {
+        if (failed === 0) {
+          badge.className = 'badge badge-ok';
+          badge.textContent = '✓ Compliant';
+        } else {
+          badge.className = 'badge badge-warn';
+          badge.textContent = `⚠ ${failed} issue(s)`;
+        }
+      }
+      if (afterCell) {
+        afterCell.textContent = failed;
+      }
+
+      termLog(`Re-assess: ${fileName} — ${passed} passed, ${failed} failed`, 'success');
+
+      // Show what changed
+      const failedChecks = r.checks.filter(c => c.status === 'FAIL');
+      if (failedChecks.length > 0) {
+        termLog(`  Still failing:`, 'warning');
+        failedChecks.forEach(c => termLog(`    ✗ ${c.name}`, 'error'));
+      }
+      const passedChecks = r.checks.filter(c => c.status === 'PASS');
+      if (passedChecks.length > 0) {
+        termLog(`  Passing: ${passedChecks.length} checks ✓`, 'success');
+      }
+    } else {
+      termLog(`Re-assess failed: ${data.error}`, 'error');
+    }
+  } catch (err) {
+    termLog(`Re-assess error: ${err.message}`, 'error');
+  } finally {
+    btnEl.disabled = false;
+    btnEl.textContent = '🔄 Re-Assess';
+  }
+}
+
+// ── Downloads ──────────────────────────────────────────
+document.getElementById('downloadReportBtn').addEventListener('click', async () => {
+  try {
+    const res = await fetch('/api/report/latest');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      termLog(err.error || 'No report found yet. Run a pipeline first.', 'warning');
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'pipeline_report.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    termLog('CSV report downloaded.', 'success');
+  } catch (err) {
+    termLog(`Download failed: ${err.message}`, 'error');
+  }
+});
+
+async function downloadFolderFiles(folder, label) {
+  termLog(`${label}: check the ${folder}/ directory on your server.`, 'info');
+}
+
+document.getElementById('downloadDoneBtn').addEventListener('click', () => downloadFolderFiles('done', 'Compliant PDFs'));
+document.getElementById('downloadReviewBtn').addEventListener('click', () => downloadFolderFiles('needs_review', 'Review PDFs'));
+
+// ── Deep Scan ──────────────────────────────────────────
+deepScanBtn.addEventListener('click', async () => {
+  deepScanBtn.disabled = true;
+  deepScanBtn.textContent = 'Scanning...';
+  deepScanPanel.classList.add('hidden');
+  termLog('Starting deep scan with Python compliance checker...', 'accent');
+
+  try {
+    const res = await fetch('/api/deep-scan', { method: 'POST' });
+    const data = await res.json();
+
+    if (data.error) {
+      termLog(`Deep scan failed: ${data.error}`, 'error');
+      deepScanBtn.disabled = false;
+      deepScanBtn.textContent = '🔍 Deep Scan (Python)';
+      return;
+    }
+
+    renderDeepScanResults(data);
+    deepScanPanel.classList.remove('hidden');
+    termLog(`Deep scan complete: ${data.scanned} PDF(s) analyzed.`, 'success');
+  } catch (err) {
+    termLog(`Deep scan error: ${err.message}`, 'error');
+  } finally {
+    deepScanBtn.disabled = false;
+    deepScanBtn.textContent = '🔍 Deep Scan (Python)';
+  }
+});
+
+function renderDeepScanResults(data) {
+  let totalPass = 0, totalFail = 0, totalWarn = 0, totalManual = 0;
+  let allGuidance = [];
+
+  for (const r of data.results) {
+    if (r.error) continue;
+    totalPass += r.passed || 0;
+    totalFail += r.failed || 0;
+    totalWarn += r.warnings || 0;
+    totalManual += r.manual_checks || 0;
+    for (const g of r.guidance) {
+      g.filename = r.filename;
+      allGuidance.push(g);
+    }
+  }
+
+  deepScanSummary.innerHTML = `
+    <div class="summary-card"><div class="value">${data.scanned}</div><div class="label">PDFs Scanned</div></div>
+    <div class="summary-card"><div class="value" style="color:var(--ok)">${totalPass}</div><div class="label">Checks Passed</div></div>
+    <div class="summary-card"><div class="value" style="color:var(--err)">${totalFail}</div><div class="label">Checks Failed</div></div>
+    <div class="summary-card"><div class="value" style="color:var(--warn)">${totalWarn}</div><div class="label">Warnings</div></div>
+    <div class="summary-card"><div class="value" style="color:var(--text2)">${totalManual}</div><div class="label">Manual Check</div></div>
+  `;
+
+  // Group guidance by fixability
+  const autoFixable = allGuidance.filter(g => g.auto_fixable);
+  const manualFix = allGuidance.filter(g => !g.auto_fixable && g.adobe_fix);
+  const notFixable = allGuidance.filter(g => !g.auto_fixable && !g.adobe_fix);
+
+  let html = '';
+
+  if (autoFixable.length > 0) {
+    html += `<h3 style="margin:1rem 0 0.5rem;font-size:0.875rem;color:var(--ok);">✅ Auto-Fixable (${autoFixable.length} issue(s)) — Our pipeline fixes these</h3>`;
+    html += autoFixable.map(g => guidanceCard(g, 'auto')).join('');
+  }
+
+  if (manualFix.length > 0) {
+    html += `<h3 style="margin:1rem 0 0.5rem;font-size:0.875rem;color:var(--warn);">🔧 Requires Manual Fix in Adobe (${manualFix.length} issue(s))</h3>`;
+    html += manualFix.map(g => guidanceCard(g, 'adobe')).join('');
+  }
+
+  if (notFixable.length > 0) {
+    html += `<h3 style="margin:1rem 0 0.5rem;font-size:0.875rem;color:var(--err);">❌ Cannot Auto-Fix (${notFixable.length} issue(s)) — Full manual review needed</h3>`;
+    html += notFixable.map(g => guidanceCard(g, 'manual')).join('');
+  }
+
+  if (!html) {
+    html = '<p style="color:var(--ok);padding:1rem;text-align:center;">✅ All checks passed! No issues found.</p>';
+  }
+
+  deepScanDetails.innerHTML = html;
+}
+
+function guidanceCard(g, type) {
+  const badgeClass = type === 'auto' ? 'badge-ok' : type === 'adobe' ? 'badge-warn' : 'badge-err';
+  const badgeText = type === 'auto' ? 'Auto-Fixable' : type === 'adobe' ? 'Adobe Fix' : 'Manual';
+  const severityClass = g.severity === 'FAIL' ? 'badge-err' : 'badge-warn';
+
+  return `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:0.75rem;margin-bottom:0.5rem;">
+      <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.35rem;flex-wrap:wrap;">
+        <span class="badge ${severityClass}">${g.severity}</span>
+        <span class="badge ${badgeClass}">${badgeText}</span>
+        <strong style="font-size:0.8125rem;">${g.name}</strong>
+      </div>
+      <div style="font-size:0.75rem;color:var(--text2);margin-bottom:0.35rem;">
+        WCAG ${g.wcag} | PDF/UA ${g.pdfua} | ${g.filename}
+      </div>
+      <div style="font-size:0.75rem;margin-bottom:0.35rem;">${g.description}</div>
+      <div style="font-size:0.75rem;color:var(--accent);margin-bottom:0.35rem;">
+        <strong>Fix:</strong> ${g.recommendation}
+      </div>
+      ${type === 'adobe' ? `<details style="font-size:0.6875rem;color:var(--text2);"><summary style="cursor:pointer;">📋 Adobe Acrobat step-by-step</summary><pre style="white-space:pre-wrap;margin-top:0.25rem;background:var(--surface);padding:0.5rem;border-radius:4px;">${g.adobe_fix}</pre></details>` : ''}
+    </div>
+  `;
+}
+
+// ── Init ───────────────────────────────────────────────
+connectTerminal();
+refreshFileList();
+</script>
+</body>
+</html>
