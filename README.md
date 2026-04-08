@@ -183,110 +183,33 @@ pdf-cleanse-ada/
 
 ## Pain Points & Lessons Learned
 
-### 1. pdf-lib Cannot Modify PDF Catalog Entries
+See `specs/standards/` for detailed documentation of each issue and its fix:
 
-**Problem:** `pdf-lib` can set `/Title` but cannot reliably write `/MarkInfo`, `/ViewerPreferences`, `/StructTreeRoot`, or `/ParentTree` — the low-level catalog entries required for PDF/UA compliance.
+| # | Standard | Topic |
+|---|----------|-------|
+| 001 | [pdf-lib catalog access](specs/standards/001-pdf-lib-catalog-access.md) | Switched to pikepdf for catalog modifications |
+| 002 | [pikepdf traversal safety](specs/standards/002-pikepdf-traversal-safety.md) | `_is_array()`/`_is_dict()` defensive helpers |
+| 003 | [Adobe auto-tag API](specs/standards/003-adobe-autotag-api.md) | Cloud API primary, COM fallback |
+| 004 | [URL filename resolution](specs/standards/004-url-filename-resolution.md) | Dual search with `decodeURIComponent` |
+| 005 | [Playwright MCP](specs/standards/005-playwright-mcp.md) | Browser automation testing |
+| 006 | [Raw binary scanning](specs/standards/006-raw-binary-scanning.md) | Regex detection for pdf-lib blind spots |
+| 007 | [Pipeline sort logic](specs/standards/007-pipeline-sort-logic.md) | Zero auto-fixable = compliant |
 
-**Fix:** Delegated all catalog-level modifications to **Python/pikepdf** via stdin/stdout subprocess pipe:
-```
-Node.js (pdf-lib)  →  stdin  →  Python (pikepdf)  →  stdout  →  Node.js (save)
-                                     ↓
-                                 JSON fixes on stderr
-```
+Full architecture diagrams in [`specs/spec.md`](specs/spec.md).
 
-### 2. pikepdf Array/Dict Type Confusion
+## Documentation
 
-**Problem:** pikepdf's `Array` and `Dictionary` objects behave differently from Python's native `list` and `dict`. Direct `isinstance(node, list)` checks fail. Calling `.get()` on Array types throws exceptions.
+All documentation lives in one of these locations (per [`specs/doc_policy.md`](specs/doc_policy.md)):
 
-**Fix:** Added defensive helper functions in `compliance_checker.py`:
-```python
-def _is_array(node):
-    try:
-        return isinstance(node, (Array, list))
-    except Exception:
-        return isinstance(node, list)
-
-def _is_dict(node):
-    try:
-        return isinstance(node, (Dictionary, dict))
-    except Exception:
-        return hasattr(node, 'keys')
-```
-Every recursive tree traversal wraps `.get()` calls in `try/except` blocks.
-
-### 3. Adobe Acrobat COM Automation Is Unreliable
-
-**Problem:** `adobe_auto.py` uses `win32com.client` to control Acrobat Pro via COM. Issues:
-- `TouchUp_AutoTag` is async with no completion callback
-- Accessibility checker results can't be extracted programmatically
-- COM requires per-thread `pythoncom.CoInitialize()`/`CoUninitialize()`
-- Acrobat must be visible and responsive during processing
-- Crashes silently on complex PDFs
-
-**Fix:** Built **Adobe Cloud API integration** (`adobe_autotag_api.py`) as the primary auto-tag path:
-- REST API — no COM threading issues
-- Proper job status polling with completion detection
-- Presigned URL upload/download (standard S3 pattern)
-- Token auto-refresh with expiry tracking
-- Graceful credential loading (file → env → prompt)
-
-**COM automation** remains available as a fallback for offline environments.
-
-### 4. File Names with Spaces Break URL Routing
-
-**Problem:** PDF names like `"NMT 2025 CITI Training Guide.pdf"` encode to `%20` in URLs, causing 404s in server endpoints.
-
-**Fix:** Server endpoints search all directories with both raw and `decodeURIComponent` versions:
-```javascript
-const searchDirs = [INPUT_DIR, DONE_DIR, NEEDS_REVIEW_DIR, ADOBE_FIXED_DIR, AUTO_TAGGED_DIR];
-for (const dir of searchDirs) {
-  const candidate = path.join(dir, fileName);
-  if (existsSync(candidate)) { pdfPath = candidate; break; }
-  // Also try URL-decoded version
-  try {
-    const decoded = decodeURIComponent(fileName);
-    if (existsSync(path.join(dir, decoded))) { pdfPath = decoded; break; }
-  } catch {}
-}
-```
-
-### 5. Browser Automation Needed for End-to-End Testing
-
-**Problem:** Manual browser testing is slow — upload PDFs, click buttons, verify terminal output, download results.
-
-**Fix:** Installed **Playwright MCP** server for browser automation via Qwen Code:
-```json
-"mcpServers": {
-  "playwright": {
-    "command": "npx",
-    "args": ["-y", "playwright-mcp@latest", "--browser", "chromium", "--headless", "false"]
-  }
-}
-```
-Enables programmatic testing: navigate, click, screenshot, extract text, verify results.
-
-### 6. PDF Language Detection from Raw Binary
-
-**Problem:** `/Lang` can appear as `/Lang (en-US)` or `/Lang /en-US`, and sometimes has BOM markers (`þÿ` or `ÿþ`).
-
-**Fix:** Raw regex scanner in `pdf-tools.js` handles all variants:
-```javascript
-const langMatch = text.match(/\/Lang\s*\(([^)]+)\)/) ||
-                  text.match(/\/Lang\s*\/([A-Za-z\-]+)/);
-let lang = langMatch?.[1].replace(/[\x00-\x1f\x7f-\xff]/g, '').trim();
-if (lang.startsWith('þÿ') || lang.startsWith('ÿþ')) {
-  lang = lang.substring(2);  // Strip BOM
-}
-```
-
-### 7. Pipeline Sort Logic: What Counts as "Done"?
-
-**Problem:** Should a PDF with 0 auto-fixable issues but 2 human-review issues be "compliant" or "needs review"?
-
-**Fix:** A PDF is **"done"** when it has **zero auto-fixable issues**, even if human-review issues remain. Rationale:
-- Auto-fixable = the pipeline could fix it but didn't (bug)
-- Human-review = genuinely requires judgment (alt text quality, reading order)
-- Blocking "done" on human-review items means nothing ever completes
+| File | Content |
+|------|---------|
+| `README.md` | This file — overview, quick start, API reference |
+| `CHANGELOG.md` | Chronological change history |
+| [`specs/spec.md`](specs/spec.md) | Architecture diagrams (ASCII art) |
+| [`specs/tasks.md`](specs/tasks.md) | Task tracker |
+| [`specs/plan.md`](specs/plan.md) | Project plan and risk register |
+| [`specs/doc_policy.md`](specs/doc_policy.md) | Documentation policy |
+| [`specs/standards/`](specs/standards/) | Numbered standards (pain points + fixes) |
 
 ## Compliance Standards
 
