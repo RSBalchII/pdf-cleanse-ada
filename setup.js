@@ -42,7 +42,7 @@ async function main() {
 
   // Check Python
   info('Checking Python...');
-  const pyCheck = spawnSync(PY_BASE, ['--version'], { shell: isWin });
+  const pyCheck = spawnSync(PY_BASE, ['--version']);
   if (pyCheck.status !== 0) {
     fail('Python not found. Please install Python 3.10+ from https://www.python.org/downloads/');
     process.exit(1);

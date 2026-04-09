@@ -32,6 +32,8 @@ export const DONE_DIR = join(SCRIPT_DIR, 'done');
 export const NEEDS_REVIEW_DIR = join(SCRIPT_DIR, 'needs_review');
 export const RESULTS_DIR = join(SCRIPT_DIR, 'pipeline_results');
 export const AUTO_TAGGED_DIR = join(SCRIPT_DIR, 'adobe_tagged');
+export const ADOBE_FIXED_DIR = join(SCRIPT_DIR, 'adobe_fixed');
+export const AUTO_FIXED_DIR = join(SCRIPT_DIR, 'auto_fixed');
 
 /**
  * Scan raw PDF bytes for structural markers that pdf-lib can't access.

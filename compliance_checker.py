@@ -8,6 +8,11 @@ Comprehensive accessibility assessment mapped to:
 - Section 508 Refresh (2017+)
 
 Each check is mapped to specific success criteria for compliance reporting.
+Checks are categorized by remediation level:
+  - AUTO_FIXABLE: Can be fixed programmatically (title, language, DisplayDocTitle, MarkInfo)
+  - HUMAN_REVIEW: Detectable but requires human judgment (headings, figures, tables, links)
+  - MANUAL_ONLY: Requires full human intervention (fonts, encryption)
+  - MANUAL_CHECK: Needs human verification (reading order)
 """
 
 import json
@@ -63,6 +68,7 @@ class ComplianceCheck:
     location: str = ""
     recommendation: str = ""
     details: dict = None
+    remediation_level: str = "MANUAL_CHECK"  # AUTO_FIXABLE, HUMAN_REVIEW, MANUAL_ONLY, MANUAL_CHECK
 
 
 @dataclass
@@ -108,7 +114,7 @@ WCAG_CRITERIA = {
 def check_title(pdf: pikepdf.Pdf) -> ComplianceCheck:
     """WCAG 2.4.2 - Page Titled (Level A)"""
     title = pdf.Root.get("/Title")
-    
+
     if title:
         return ComplianceCheck(
             check_id="WCAG-2.4.2",
@@ -120,7 +126,8 @@ def check_title(pdf: pikepdf.Pdf) -> ComplianceCheck:
             pdfua_section="§7.1",
             section508="502.3.1",
             recommendation="Title is set correctly",
-            details={"title": str(title)}
+            details={"title": str(title)},
+            remediation_level="AUTO_FIXABLE"
         )
     else:
         return ComplianceCheck(
@@ -133,14 +140,15 @@ def check_title(pdf: pikepdf.Pdf) -> ComplianceCheck:
             pdfua_section="§7.1",
             section508="502.3.1",
             location="Document Properties",
-            recommendation="Set document title in metadata (not just filename)"
+            recommendation="Set document title in metadata (not just filename)",
+            remediation_level="AUTO_FIXABLE"
         )
 
 
 def check_language(pdf: pikepdf.Pdf) -> ComplianceCheck:
     """WCAG 3.1.1 - Language of Page (Level A)"""
     lang = pdf.Root.get("/Lang")
-    
+
     if lang:
         return ComplianceCheck(
             check_id="WCAG-3.1.1",
@@ -152,7 +160,8 @@ def check_language(pdf: pikepdf.Pdf) -> ComplianceCheck:
             pdfua_section="§7.2",
             section508="502.3.1",
             recommendation=f"Language set to: {str(lang)}",
-            details={"language": str(lang)}
+            details={"language": str(lang)},
+            remediation_level="AUTO_FIXABLE"
         )
     else:
         return ComplianceCheck(
@@ -165,7 +174,8 @@ def check_language(pdf: pikepdf.Pdf) -> ComplianceCheck:
             pdfua_section="§7.2",
             section508="502.3.1",
             location="Document Catalog",
-            recommendation="Set document language (e.g., 'en-US') for screen readers"
+            recommendation="Set document language (e.g., 'en-US') for screen readers",
+            remediation_level="AUTO_FIXABLE"
         )
 
 
@@ -173,10 +183,10 @@ def check_display_doctitle(pdf: pikepdf.Pdf) -> ComplianceCheck:
     """WCAG 2.4.2 - DisplayDocTitle (Level A)"""
     viewer_prefs = pdf.Root.get("/ViewerPreferences")
     display_title = False
-    
+
     if viewer_prefs:
         display_title = viewer_prefs.get("/DisplayDocTitle") == True
-    
+
     if display_title:
         return ComplianceCheck(
             check_id="WCAG-2.4.2-DT",
@@ -187,7 +197,8 @@ def check_display_doctitle(pdf: pikepdf.Pdf) -> ComplianceCheck:
             wcag_criteria="2.4.2",
             pdfua_section="§7.1",
             section508="502.3.1",
-            recommendation="Title will display in viewer title bar"
+            recommendation="Title will display in viewer title bar",
+            remediation_level="AUTO_FIXABLE"
         )
     else:
         return ComplianceCheck(
@@ -200,14 +211,15 @@ def check_display_doctitle(pdf: pikepdf.Pdf) -> ComplianceCheck:
             pdfua_section="§7.1",
             section508="502.3.1",
             location="ViewerPreferences",
-            recommendation="Set DisplayDocTitle to true"
+            recommendation="Set DisplayDocTitle to true",
+            remediation_level="AUTO_FIXABLE"
         )
 
 
 def check_tags_tree(pdf: pikepdf.Pdf) -> ComplianceCheck:
     """WCAG 1.3.1, 4.1.2 - Tagged PDF (Level A)"""
     struct_tree = pdf.Root.get("/StructTreeRoot")
-    
+
     if struct_tree:
         return ComplianceCheck(
             check_id="WCAG-1.3.1-TAG",
@@ -219,7 +231,8 @@ def check_tags_tree(pdf: pikepdf.Pdf) -> ComplianceCheck:
             pdfua_section="§5",
             section508="502.3.2",
             recommendation="Document is tagged",
-            details={"has_struct_tree": True}
+            details={"has_struct_tree": True},
+            remediation_level="MANUAL_ONLY"
         )
     else:
         return ComplianceCheck(
@@ -232,7 +245,8 @@ def check_tags_tree(pdf: pikepdf.Pdf) -> ComplianceCheck:
             pdfua_section="§5",
             section508="502.3.2",
             location="Document Catalog",
-            recommendation="Document requires full tagging structure (manual process in Adobe Acrobat)"
+            recommendation="Document requires full tagging structure (manual process in Adobe Acrobat)",
+            remediation_level="MANUAL_ONLY"
         )
 
 
@@ -240,11 +254,11 @@ def check_mark_info(pdf: pikepdf.Pdf) -> ComplianceCheck:
     """PDF/UA §5.3 - MarkInfo"""
     mark_info = pdf.Root.get("/MarkInfo")
     is_marked = False
-    
+
     if mark_info:
         marked = mark_info.get("/Marked")
         is_marked = marked is True or marked == Name("/true")
-    
+
     if is_marked:
         return ComplianceCheck(
             check_id="PDFUA-5.3",
@@ -255,7 +269,8 @@ def check_mark_info(pdf: pikepdf.Pdf) -> ComplianceCheck:
             wcag_criteria="4.1.2",
             pdfua_section="§5.3",
             section508="502.3.2",
-            recommendation="Document is marked as tagged"
+            recommendation="Document is marked as tagged",
+            remediation_level="AUTO_FIXABLE"
         )
     else:
         return ComplianceCheck(
@@ -268,14 +283,15 @@ def check_mark_info(pdf: pikepdf.Pdf) -> ComplianceCheck:
             pdfua_section="§5.3",
             section508="502.3.2",
             location="Document Catalog /MarkInfo",
-            recommendation="Set MarkInfo.Marked to true"
+            recommendation="Set MarkInfo.Marked to true",
+            remediation_level="AUTO_FIXABLE"
         )
 
 
 def check_reading_order(pdf: pikepdf.Pdf) -> ComplianceCheck:
     """WCAG 1.3.2 - Meaningful Sequence"""
     struct_tree = pdf.Root.get("/StructTreeRoot")
-    
+
     if not struct_tree:
         return ComplianceCheck(
             check_id="WCAG-1.3.2",
@@ -286,11 +302,12 @@ def check_reading_order(pdf: pikepdf.Pdf) -> ComplianceCheck:
             wcag_criteria="1.3.2",
             pdfua_section="§5.3",
             section508="502.3.2",
-            recommendation="Add tags first, then verify reading order"
+            recommendation="Add tags first, then verify reading order",
+            remediation_level="MANUAL_CHECK"
         )
-    
+
     parent_tree = struct_tree.get("/ParentTree")
-    
+
     if parent_tree:
         return ComplianceCheck(
             check_id="WCAG-1.3.2",
@@ -301,7 +318,8 @@ def check_reading_order(pdf: pikepdf.Pdf) -> ComplianceCheck:
             wcag_criteria="1.3.2",
             pdfua_section="§5.3",
             section508="502.3.2",
-            recommendation="Reading order mapping present (verify manually)"
+            recommendation="Reading order mapping present (verify manually)",
+            remediation_level="MANUAL_CHECK"
         )
     else:
         return ComplianceCheck(
@@ -314,14 +332,15 @@ def check_reading_order(pdf: pikepdf.Pdf) -> ComplianceCheck:
             pdfua_section="§5.3",
             section508="502.3.2",
             location="Structure Tree Root",
-            recommendation="Ensure ParentTree maps content streams to structure elements"
+            recommendation="Ensure ParentTree maps content streams to structure elements",
+            remediation_level="MANUAL_CHECK"
         )
 
 
 def check_headings_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
     """WCAG 1.3.1, 2.4.6 - Headings and Labels (Level A)"""
     struct_tree = pdf.Root.get("/StructTreeRoot")
-    
+
     if not struct_tree:
         return ComplianceCheck(
             check_id="WCAG-2.4.6-H",
@@ -332,12 +351,14 @@ def check_headings_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
             wcag_criteria="1.3.1, 2.4.6",
             pdfua_section="§5.4",
             section508="502.3.2",
-            recommendation="Add tags first"
+            recommendation="Add tags first",
+            remediation_level="HUMAN_REVIEW"
         )
-    
-    # Collect heading tags
+
+    # Collect heading tags and their sequence
     heading_tags = []
-    
+    heading_sequence = []
+
     def collect_headings(node):
         if node is None:
             return
@@ -356,6 +377,13 @@ def check_headings_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
             type_str = str(elem_type)
             if type_str.startswith("/H") and type_str not in ["/Heading", "/Header"]:
                 heading_tags.append(type_str)
+                # Track sequence for first-heading check
+                if type_str not in ["/Heading", "/Header"] and len(type_str) <= 3:
+                    try:
+                        level = int(type_str[2:])
+                        heading_sequence.append((level, type_str))
+                    except ValueError:
+                        pass
 
         try:
             children = node.get("/K")
@@ -363,26 +391,61 @@ def check_headings_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
             return
         if children:
             collect_headings(children)
-    
+
     k_array = struct_tree.get("/K")
     if k_array:
         collect_headings(k_array)
-    
+
     # Analyze
     has_h1 = "/H1" in heading_tags
-    
+
+    # Check for multiple H1s
+    h1_count = heading_tags.count("/H1")
+    if h1_count > 1:
+        return ComplianceCheck(
+            check_id="WCAG-2.4.6-H",
+            name="Heading Hierarchy",
+            description=f"Document has {h1_count} H1 headings (should typically have one)",
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.3.1, 2.4.6",
+            pdfua_section="§5.4",
+            section508="502.3.2",
+            location="Structure tree",
+            recommendation="Use only one H1 per document (main title), use H2+ for sections",
+            details={"heading_tags": heading_tags, "h1_count": h1_count},
+            remediation_level="HUMAN_REVIEW"
+        )
+
+    # Check if first heading is not H1
+    if heading_sequence and heading_sequence[0][0] != 1:
+        return ComplianceCheck(
+            check_id="WCAG-2.4.6-H",
+            name="Heading Hierarchy",
+            description=f"Document starts with H{heading_sequence[0][0]} instead of H1",
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.3.1, 2.4.6",
+            pdfua_section="§5.4",
+            section508="502.3.2",
+            location=f"First heading: {heading_sequence[0][1]}",
+            recommendation="First heading should be H1 (main document title)",
+            details={"heading_tags": heading_tags, "first_heading": heading_sequence[0][1]},
+            remediation_level="HUMAN_REVIEW"
+        )
+
     if has_h1:
         # Check for skipped levels
         levels_present = []
         for i in range(1, 7):
             if f"/H{i}" in heading_tags:
                 levels_present.append(i)
-        
+
         skipped = []
         for i in range(len(levels_present) - 1):
             if levels_present[i+1] - levels_present[i] > 1:
                 skipped.append((levels_present[i], levels_present[i+1]))
-        
+
         if skipped:
             return ComplianceCheck(
                 check_id="WCAG-2.4.6-H",
@@ -395,7 +458,8 @@ def check_headings_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
                 section508="502.3.2",
                 location="Structure tree",
                 recommendation="Fix heading hierarchy - do not skip levels (H1 → H2 → H3)",
-                details={"heading_tags": heading_tags, "skipped": skipped}
+                details={"heading_tags": heading_tags, "skipped": skipped},
+                remediation_level="HUMAN_REVIEW"
             )
         else:
             return ComplianceCheck(
@@ -408,7 +472,8 @@ def check_headings_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
                 pdfua_section="§5.4",
                 section508="502.3.2",
                 recommendation="Headings are properly structured",
-                details={"heading_tags": list(set(heading_tags))}
+                details={"heading_tags": list(set(heading_tags))},
+                remediation_level="HUMAN_REVIEW"
             )
     else:
         if heading_tags:
@@ -423,7 +488,8 @@ def check_headings_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
                 section508="502.3.2",
                 location="Structure tree",
                 recommendation="Ensure document starts with H1 heading",
-                details={"heading_tags": heading_tags}
+                details={"heading_tags": heading_tags},
+                remediation_level="HUMAN_REVIEW"
             )
         else:
             return ComplianceCheck(
@@ -435,14 +501,15 @@ def check_headings_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
                 wcag_criteria="1.3.1, 2.4.6",
                 pdfua_section="§5.4",
                 section508="502.3.2",
-                recommendation="Consider adding headings for navigation (may not be required for short documents)"
+                recommendation="Consider adding headings for navigation (may not be required for short documents)",
+                remediation_level="HUMAN_REVIEW"
             )
 
 
 def check_images_alt_text(pdf: pikepdf.Pdf) -> ComplianceCheck:
     """WCAG 1.1.1 - Non-text Content (Level A)"""
     struct_tree = pdf.Root.get("/StructTreeRoot")
-    
+
     # Count XObject images
     image_count = 0
     for page in pdf.pages:
@@ -452,7 +519,7 @@ def check_images_alt_text(pdf: pikepdf.Pdf) -> ComplianceCheck:
             for key, xobj in xobjects.items():
                 if xobj and xobj.get("/Subtype") == Name("/Image"):
                     image_count += 1
-    
+
     if image_count == 0:
         return ComplianceCheck(
             check_id="WCAG-1.1.1-IMG",
@@ -463,9 +530,10 @@ def check_images_alt_text(pdf: pikepdf.Pdf) -> ComplianceCheck:
             wcag_criteria="1.1.1",
             pdfua_section="§5.6",
             section508="502.3.3",
-            recommendation="No images to check"
+            recommendation="No images to check",
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     if not struct_tree:
         return ComplianceCheck(
             check_id="WCAG-1.1.1-IMG",
@@ -477,13 +545,14 @@ def check_images_alt_text(pdf: pikepdf.Pdf) -> ComplianceCheck:
             pdfua_section="§5.6",
             section508="502.3.3",
             location="Document",
-            recommendation=f"All {image_count} images need /Figure tags with alt text"
+            recommendation=f"All {image_count} images need /Figure tags with alt text",
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     # Count figures with alt text
     figures_with_alt = 0
     figures_total = 0
-    
+
     def count_figures(node):
         nonlocal figures_with_alt, figures_total
         if node is None:
@@ -514,13 +583,13 @@ def check_images_alt_text(pdf: pikepdf.Pdf) -> ComplianceCheck:
             return
         if children:
             count_figures(children)
-    
+
     k_array = struct_tree.get("/K")
     if k_array:
         count_figures(k_array)
-    
+
     untagged_images = image_count - figures_total
-    
+
     if untagged_images > 0:
         return ComplianceCheck(
             check_id="WCAG-1.1.1-IMG",
@@ -533,9 +602,10 @@ def check_images_alt_text(pdf: pikepdf.Pdf) -> ComplianceCheck:
             section508="502.3.3",
             location="Structure tree",
             recommendation=f"Add {untagged_images} images to structure tree with /Figure tags and alt text",
-            details={"total_xobjects": image_count, "tagged_figures": figures_total, "untagged": untagged_images}
+            details={"total_xobjects": image_count, "tagged_figures": figures_total, "untagged": untagged_images},
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     if figures_total > 0 and figures_with_alt < figures_total:
         missing_alt = figures_total - figures_with_alt
         return ComplianceCheck(
@@ -549,9 +619,10 @@ def check_images_alt_text(pdf: pikepdf.Pdf) -> ComplianceCheck:
             section508="502.3.3",
             location="Structure tree",
             recommendation=f"Add alt text to {missing_alt} figures",
-            details={"tagged_figures": figures_total, "with_alt": figures_with_alt, "missing_alt": missing_alt}
+            details={"tagged_figures": figures_total, "with_alt": figures_with_alt, "missing_alt": missing_alt},
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     return ComplianceCheck(
         check_id="WCAG-1.1.1-IMG",
         name="Image Alternative Text",
@@ -562,14 +633,15 @@ def check_images_alt_text(pdf: pikepdf.Pdf) -> ComplianceCheck:
         pdfua_section="§5.6",
         section508="502.3.3",
         recommendation="All images have alternative text",
-        details={"tagged_figures": figures_total, "with_alt": figures_with_alt}
+        details={"tagged_figures": figures_total, "with_alt": figures_with_alt, "image_count": image_count},
+        remediation_level="HUMAN_REVIEW"
     )
 
 
 def check_tables_headers(pdf: pikepdf.Pdf) -> ComplianceCheck:
     """WCAG 1.3.1 - Info and Relationships (Tables)"""
     struct_tree = pdf.Root.get("/StructTreeRoot")
-    
+
     if not struct_tree:
         return ComplianceCheck(
             check_id="WCAG-1.3.1-TBL",
@@ -580,12 +652,13 @@ def check_tables_headers(pdf: pikepdf.Pdf) -> ComplianceCheck:
             wcag_criteria="1.3.1",
             pdfua_section="§5.7",
             section508="502.3.2",
-            recommendation="Add tags first"
+            recommendation="Add tags first",
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     tables_count = 0
     tables_with_headers = 0
-    
+
     def check_tables(node):
         nonlocal tables_count, tables_with_headers
         if node is None:
@@ -640,11 +713,11 @@ def check_tables_headers(pdf: pikepdf.Pdf) -> ComplianceCheck:
             children = None
         if children:
             check_tables(children)
-    
+
     k_array = struct_tree.get("/K")
     if k_array:
         check_tables(k_array)
-    
+
     if tables_count == 0:
         return ComplianceCheck(
             check_id="WCAG-1.3.1-TBL",
@@ -655,9 +728,10 @@ def check_tables_headers(pdf: pikepdf.Pdf) -> ComplianceCheck:
             wcag_criteria="1.3.1",
             pdfua_section="§5.7",
             section508="502.3.2",
-            recommendation="No tables to check"
+            recommendation="No tables to check",
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     if tables_with_headers < tables_count:
         missing = tables_count - tables_with_headers
         return ComplianceCheck(
@@ -671,9 +745,10 @@ def check_tables_headers(pdf: pikepdf.Pdf) -> ComplianceCheck:
             section508="502.3.2",
             location="Structure tree",
             recommendation=f"Add header cells (/TH) with scope to {missing} tables",
-            details={"total_tables": tables_count, "with_headers": tables_with_headers, "missing": missing}
+            details={"total_tables": tables_count, "with_headers": tables_with_headers, "missing": missing},
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     return ComplianceCheck(
         check_id="WCAG-1.3.1-TBL",
         name="Table Headers",
@@ -684,14 +759,15 @@ def check_tables_headers(pdf: pikepdf.Pdf) -> ComplianceCheck:
         pdfua_section="§5.7",
         section508="502.3.2",
         recommendation="All tables have proper header structure",
-        details={"total_tables": tables_count, "with_headers": tables_with_headers}
+        details={"total_tables": tables_count, "with_headers": tables_with_headers},
+        remediation_level="HUMAN_REVIEW"
     )
 
 
 def check_lists_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
     """WCAG 1.3.1 - Lists Structure"""
     struct_tree = pdf.Root.get("/StructTreeRoot")
-    
+
     if not struct_tree:
         return ComplianceCheck(
             check_id="WCAG-1.3.1-LIST",
@@ -702,12 +778,13 @@ def check_lists_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
             wcag_criteria="1.3.1",
             pdfua_section="§5.5",
             section508="502.3.2",
-            recommendation="Add tags first"
+            recommendation="Add tags first",
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     lists_count = 0
     valid_lists = 0
-    
+
     def check_lists(node):
         nonlocal lists_count, valid_lists
         if node is None:
@@ -762,11 +839,11 @@ def check_lists_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
             children = None
         if children:
             check_lists(children)
-    
+
     k_array = struct_tree.get("/K")
     if k_array:
         check_lists(k_array)
-    
+
     if lists_count == 0:
         return ComplianceCheck(
             check_id="WCAG-1.3.1-LIST",
@@ -777,9 +854,10 @@ def check_lists_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
             wcag_criteria="1.3.1",
             pdfua_section="§5.5",
             section508="502.3.2",
-            recommendation="No lists to check"
+            recommendation="No lists to check",
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     if valid_lists < lists_count:
         invalid = lists_count - valid_lists
         return ComplianceCheck(
@@ -793,9 +871,10 @@ def check_lists_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
             section508="502.3.2",
             location="Structure tree",
             recommendation=f"Fix list structure: L → LI → Lbl/LBody for {invalid} lists",
-            details={"total_lists": lists_count, "valid": valid_lists, "invalid": invalid}
+            details={"total_lists": lists_count, "valid": valid_lists, "invalid": invalid},
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     return ComplianceCheck(
         check_id="WCAG-1.3.1-LIST",
         name="List Structure",
@@ -806,7 +885,8 @@ def check_lists_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
         pdfua_section="§5.5",
         section508="502.3.2",
         recommendation="All lists are properly structured",
-        details={"total_lists": lists_count, "valid": valid_lists}
+        details={"total_lists": lists_count, "valid": valid_lists},
+        remediation_level="HUMAN_REVIEW"
     )
 
 
@@ -815,24 +895,24 @@ def check_links(pdf: pikepdf.Pdf) -> ComplianceCheck:
     link_count = 0
     non_descriptive = 0
     non_descriptive_patterns = ["click here", "here", "more", "link", "read more", "learn more", "this"]
-    
+
     for page in pdf.pages:
         annots = page.get("/Annots")
         if not annots:
             continue
-        
+
         for annot in annots:
             if annot.get("/Subtype") == Name("/Link"):
                 link_count += 1
                 alt_text = annot.get("/Contents") or annot.get("/NM")
-                
+
                 if alt_text:
                     alt_lower = str(alt_text).lower()
                     for pattern in non_descriptive_patterns:
                         if pattern in alt_lower:
                             non_descriptive += 1
                             break
-    
+
     if link_count == 0:
         return ComplianceCheck(
             check_id="WCAG-2.4.4-LINK",
@@ -843,9 +923,10 @@ def check_links(pdf: pikepdf.Pdf) -> ComplianceCheck:
             wcag_criteria="2.4.4",
             pdfua_section="§5.9",
             section508="502.3.2",
-            recommendation="No links to check"
+            recommendation="No links to check",
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     if non_descriptive > 0:
         return ComplianceCheck(
             check_id="WCAG-2.4.4-LINK",
@@ -858,9 +939,10 @@ def check_links(pdf: pikepdf.Pdf) -> ComplianceCheck:
             section508="502.3.2",
             location="Annotations",
             recommendation=f"Rewrite {non_descriptive} links to be descriptive (avoid 'click here', 'here', 'more')",
-            details={"total_links": link_count, "non_descriptive": non_descriptive}
+            details={"total_links": link_count, "non_descriptive": non_descriptive},
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     return ComplianceCheck(
         check_id="WCAG-2.4.4-LINK",
         name="Link Purpose",
@@ -871,7 +953,8 @@ def check_links(pdf: pikepdf.Pdf) -> ComplianceCheck:
         pdfua_section="§5.9",
         section508="502.3.2",
         recommendation="All links have descriptive text",
-        details={"total_links": link_count}
+        details={"total_links": link_count},
+        remediation_level="HUMAN_REVIEW"
     )
 
 
@@ -879,26 +962,22 @@ def check_forms(pdf: pikepdf.Pdf) -> ComplianceCheck:
     """WCAG 4.1.2 - Form Fields (Level A)"""
     form_fields = 0
     fields_with_tooltips = 0
-    fields_in_tags = 0
-    
+
     for page in pdf.pages:
         annots = page.get("/Annots")
         if not annots:
             continue
-        
+
         for annot in annots:
             subtype = annot.get("/Subtype")
             if subtype == Name("/Widget"):
                 form_fields += 1
-                
+
                 # Check for tooltip (/TU)
                 tooltip = annot.get("/TU")
                 if tooltip:
                     fields_with_tooltips += 1
-                
-                # Check if field is in structure tree (simplified check)
-                fields_in_tags += 1  # Assume tagged if we can access it
-    
+
     if form_fields == 0:
         return ComplianceCheck(
             check_id="WCAG-4.1.2-FORM",
@@ -909,9 +988,10 @@ def check_forms(pdf: pikepdf.Pdf) -> ComplianceCheck:
             wcag_criteria="4.1.2",
             pdfua_section="§5.10",
             section508="502.3.2",
-            recommendation="No forms to check"
+            recommendation="No forms to check",
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     if fields_with_tooltips < form_fields:
         missing = form_fields - fields_with_tooltips
         return ComplianceCheck(
@@ -925,9 +1005,10 @@ def check_forms(pdf: pikepdf.Pdf) -> ComplianceCheck:
             section508="502.3.2",
             location="Form fields",
             recommendation=f"Add tooltips (/TU) to {missing} form fields",
-            details={"total_fields": form_fields, "with_tooltips": fields_with_tooltips, "missing": missing}
+            details={"total_fields": form_fields, "with_tooltips": fields_with_tooltips, "missing": missing},
+            remediation_level="HUMAN_REVIEW"
         )
-    
+
     return ComplianceCheck(
         check_id="WCAG-4.1.2-FORM",
         name="Form Accessibility",
@@ -938,7 +1019,538 @@ def check_forms(pdf: pikepdf.Pdf) -> ComplianceCheck:
         pdfua_section="§5.10",
         section508="502.3.2",
         recommendation="All form fields have tooltips",
-        details={"total_fields": form_fields, "with_tooltips": fields_with_tooltips}
+        details={"total_fields": form_fields, "with_tooltips": fields_with_tooltips},
+        remediation_level="HUMAN_REVIEW"
+    )
+
+
+def check_tab_order(pdf: pikepdf.Pdf) -> ComplianceCheck:
+    """PDF/UA - Tab order consistency with structure order."""
+    struct_tree = pdf.Root.get("/StructTreeRoot")
+
+    if not struct_tree:
+        return ComplianceCheck(
+            check_id="PDFUA-TAB",
+            name="Tab Order",
+            description="Cannot check tab order - no structure tree",
+            status=CheckStatus.MANUAL.value,
+            level=ComplianceLevel.AA.value,
+            wcag_criteria="2.4.3",
+            pdfua_section="§5.3",
+            section508="502.3.2",
+            recommendation="Add tags first, then verify tab order matches reading order",
+            remediation_level="MANUAL_CHECK"
+        )
+
+    inconsistent_tabs = 0
+    pages_checked = 0
+
+    for page_num, page in enumerate(pdf.pages, 1):
+        # Check if page has explicit TabOrder set
+        tab_order = page.get("/TabOrder")
+        if tab_order and str(tab_order) not in ["/S", "/R"]:
+            # /S = structure order, /R = row order — both acceptable
+            inconsistent_tabs += 1
+
+        # Check annotations for /StructParent mapping
+        annots = page.get("/Annots")
+        if annots:
+            pages_checked += 1
+            for annot in annots:
+                if annot.get("/Subtype") in [Name("/Link"), Name("/Widget")]:
+                    # Interactive elements should have /StructParent linking to structure tree
+                    struct_parent = annot.get("/StructParent")
+                    if struct_parent is None:
+                        inconsistent_tabs += 1
+
+    if pages_checked == 0:
+        return ComplianceCheck(
+            check_id="PDFUA-TAB",
+            name="Tab Order",
+            description="No interactive elements found — tab order is not applicable",
+            status=CheckStatus.PASS.value,
+            level=ComplianceLevel.AA.value,
+            wcag_criteria="2.4.3",
+            pdfua_section="§5.3",
+            section508="502.3.2",
+            recommendation="No tab order to verify",
+            remediation_level="MANUAL_CHECK"
+        )
+
+    if inconsistent_tabs > 0:
+        return ComplianceCheck(
+            check_id="PDFUA-TAB",
+            name="Tab Order",
+            description=f"{inconsistent_tabs} elements with inconsistent tab order",
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.AA.value,
+            wcag_criteria="2.4.3",
+            pdfua_section="§5.3",
+            section508="502.3.2",
+            location="Page annotations",
+            recommendation="Ensure tab order matches structure order (S in page properties)",
+            details={"inconsistent_elements": inconsistent_tabs},
+            remediation_level="HUMAN_REVIEW"
+        )
+
+    return ComplianceCheck(
+        check_id="PDFUA-TAB",
+        name="Tab Order",
+        description="Tab order is consistent with structure order",
+        status=CheckStatus.PASS.value,
+        level=ComplianceLevel.AA.value,
+        wcag_criteria="2.4.3",
+        pdfua_section="§5.3",
+        section508="502.3.2",
+        recommendation="Tab order is consistent",
+        remediation_level="MANUAL_CHECK"
+    )
+
+
+def check_alt_text_quality(pdf: pikepdf.Pdf) -> list:
+    """
+    Check alt text quality issues (multiple checks from Adobe report):
+    - Nested alt text that will never be read
+    - Alt text that hides annotation content
+    - Alt text not associated with content
+    - Other elements requiring alt text
+
+    Returns a list of ComplianceCheck objects (0-n issues).
+    """
+    struct_tree = pdf.Root.get("/StructTreeRoot")
+    checks = []
+
+    if not struct_tree:
+        return checks  # Can't check alt text without structure tree
+
+    orphaned_alt = 0
+    nested_unreadable_alt = 0
+    alt_hiding_annotation = 0
+
+    def check_alt_node(node, depth=0, parent_is_artifact=False):
+        nonlocal orphaned_alt, nested_unreadable_alt, alt_hiding_annotation
+        if node is None:
+            return
+        if _is_array(node):
+            for item in node:
+                check_alt_node(item, depth, parent_is_artifact)
+            return
+        if not _is_dict(node):
+            return
+
+        try:
+            elem_type = node.get("/S")
+        except Exception:
+            return
+
+        type_str = str(elem_type) if elem_type else ""
+
+        # Check for Alt text inside Artifact or other non-readable elements
+        alt_text = node.get("/Alt")
+        if alt_text and parent_is_artifact:
+            nested_unreadable_alt += 1
+
+        # Check for alt text on Link annotations (should describe purpose, not hide content)
+        if elem_type == Name("/Link"):
+            if alt_text and len(str(alt_text).strip()) > 100:
+                # Excessively long alt text on links likely hides annotation content
+                alt_hiding_annotation += 1
+
+        # Check for figures with empty alt text (not just missing, but explicitly empty)
+        if elem_type == Name("/Figure"):
+            if alt_text is not None and not str(alt_text).strip():
+                orphaned_alt += 1  # Empty string = placeholder/meaningless
+
+        # Check for annotations without associated content
+        if elem_type == Name("/Annotation") and not node.get("/Contents"):
+            orphaned_alt += 1
+
+        # Determine if children are inside non-readable parent
+        is_non_readable = type_str in ["/Artifact", "/Part", "/Document"] or parent_is_artifact
+
+        try:
+            children = node.get("/K")
+        except Exception:
+            return
+        if children:
+            check_alt_node(children, depth + 1, is_non_readable)
+
+    k_array = struct_tree.get("/K")
+    if k_array:
+        check_alt_node(k_array)
+
+    if nested_unreadable_alt > 0:
+        checks.append(ComplianceCheck(
+            check_id="ALT-NEST",
+            name="Nested Alternate Text",
+            description=f"{nested_unreadable_alt} alt text elements inside non-readable parents (will never be read)",
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.1.1",
+            pdfua_section="§5.6",
+            section508="502.3.3",
+            location="Structure tree",
+            recommendation="Move alt text out of Artifact or non-readable container elements",
+            details={"nested_unreadable": nested_unreadable_alt},
+            remediation_level="HUMAN_REVIEW"
+        ))
+
+    if alt_hiding_annotation > 0:
+        checks.append(ComplianceCheck(
+            check_id="ALT-HIDE",
+            name="Alt Text Hides Annotation",
+            description=f"{alt_hiding_annotation} links/annotations have excessively long alt text that may hide content",
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.1.1, 4.1.2",
+            pdfua_section="§5.9",
+            section508="502.3.2",
+            location="Annotations",
+            recommendation="Keep alt text concise; use /Contents for actual annotation content",
+            details={"hiding_annotation": alt_hiding_annotation},
+            remediation_level="HUMAN_REVIEW"
+        ))
+
+    if orphaned_alt > 0:
+        checks.append(ComplianceCheck(
+            check_id="ALT-ORPH",
+            name="Alternate Text Not Associated with Content",
+            description=f"{orphaned_alt} figures have empty or orphaned alt text",
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.1.1",
+            pdfua_section="§5.6",
+            section508="502.3.3",
+            location="Structure tree",
+            recommendation="Ensure alt text is meaningful and associated with actual content",
+            details={"orphaned_alt": orphaned_alt},
+            remediation_level="HUMAN_REVIEW"
+        ))
+
+    return checks
+
+
+def check_table_regularity(pdf: pikepdf.Pdf) -> ComplianceCheck:
+    """Check table structure regularity — consistent columns per row, rows per column."""
+    struct_tree = pdf.Root.get("/StructTreeRoot")
+
+    if not struct_tree:
+        return ComplianceCheck(
+            check_id="WCAG-1.3.1-TBLREG",
+            name="Table Regularity",
+            description="Cannot check - no structure tree",
+            status=CheckStatus.MANUAL.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.3.1",
+            pdfua_section="§5.7",
+            section508="502.3.2",
+            recommendation="Add tags first",
+            remediation_level="HUMAN_REVIEW"
+        )
+
+    irregular_tables = []
+
+    def check_table(node, table_idx=0):
+        if node is None:
+            return
+        if _is_array(node):
+            for item in node:
+                check_table(item, table_idx)
+            return
+        if not _is_dict(node):
+            return
+
+        try:
+            elem_type = node.get("/S")
+        except Exception:
+            return
+
+        if elem_type == Name("/Table"):
+            table_idx += 1
+            row_col_counts = []
+
+            def check_rows(child):
+                if child is None:
+                    return
+                if _is_array(child):
+                    for c in child:
+                        check_rows(c)
+                    return
+                if not _is_dict(child):
+                    return
+                try:
+                    child_type = child.get("/S")
+                except Exception:
+                    return
+
+                if child_type == Name("/TR"):
+                    # Count cells in this row
+                    cell_count = 0
+                    def count_cells(grandchild):
+                        nonlocal cell_count
+                        if grandchild is None:
+                            return
+                        if _is_array(grandchild):
+                            for gc in grandchild:
+                                count_cells(gc)
+                            return
+                        if not _is_dict(grandchild):
+                            return
+                        try:
+                            gc_type = grandchild.get("/S")
+                        except Exception:
+                            return
+                        if gc_type in [Name("/TD"), Name("/TH")]:
+                            cell_count += 1
+                        try:
+                            ggc = grandchild.get("/K")
+                        except Exception:
+                            return
+                        if ggc:
+                            count_cells(ggc)
+
+                    try:
+                        row_children = child.get("/K")
+                    except Exception:
+                        row_children = None
+                    if row_children:
+                        count_cells(row_children)
+                    row_col_counts.append(cell_count)
+
+                try:
+                    grandchildren = child.get("/K")
+                except Exception:
+                    return
+                if grandchildren:
+                    check_rows(grandchildren)
+
+            try:
+                children = node.get("/K")
+            except Exception:
+                children = None
+            if children:
+                check_rows(children)
+
+            # Check if all rows have same column count
+            if len(set(row_col_counts)) > 1 and len(row_col_counts) > 1:
+                irregular_tables.append({
+                    "table": table_idx,
+                    "row_counts": row_col_counts,
+                    "expected": row_col_counts[0] if row_col_counts else 0
+                })
+
+        try:
+            children = node.get("/K")
+        except Exception:
+            children = None
+        if children:
+            check_table(children, table_idx)
+
+    k_array = struct_tree.get("/K")
+    if k_array:
+        check_table(k_array)
+
+    if irregular_tables:
+        return ComplianceCheck(
+            check_id="WCAG-1.3.1-TBLREG",
+            name="Table Regularity",
+            description=f"{len(irregular_tables)} table(s) have inconsistent column counts across rows",
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.3.1",
+            pdfua_section="§5.7",
+            section508="502.3.2",
+            location="Structure tree",
+            recommendation="Ensure all rows in each table have the same number of columns (use colspan for merged cells)",
+            details={"irregular_tables": irregular_tables[:5]},  # Limit detail
+            remediation_level="HUMAN_REVIEW"
+        )
+
+    return ComplianceCheck(
+        check_id="WCAG-1.3.1-TBLREG",
+        name="Table Regularity",
+        description="All tables have consistent column counts per row",
+        status=CheckStatus.PASS.value,
+        level=ComplianceLevel.A.value,
+        wcag_criteria="1.3.1",
+        pdfua_section="§5.7",
+        section508="502.3.2",
+        recommendation="Tables are properly structured",
+        remediation_level="HUMAN_REVIEW"
+    )
+
+
+def check_table_summary(pdf: pikepdf.Pdf) -> ComplianceCheck:
+    """Check that tables have summary/caption information."""
+    struct_tree = pdf.Root.get("/StructTreeRoot")
+
+    if not struct_tree:
+        return ComplianceCheck(
+            check_id="WCAG-1.3.1-TBLSUM",
+            name="Table Summary",
+            description="Cannot check - no structure tree",
+            status=CheckStatus.MANUAL.value,
+            level=ComplianceLevel.AA.value,
+            wcag_criteria="1.3.1",
+            pdfua_section="§5.7",
+            section508="502.3.2",
+            recommendation="Add tags first",
+            remediation_level="HUMAN_REVIEW"
+        )
+
+    tables_total = 0
+    tables_with_summary = 0
+
+    def check_tables(node):
+        nonlocal tables_total, tables_with_summary
+        if node is None:
+            return
+        if _is_array(node):
+            for item in node:
+                check_tables(item)
+            return
+        if not _is_dict(node):
+            return
+
+        try:
+            elem_type = node.get("/S")
+        except Exception:
+            return
+
+        if elem_type == Name("/Table"):
+            tables_total += 1
+            # Check for /Summary, /Caption, or /Title on the table element
+            has_summary = (
+                node.get("/Summary") is not None
+                or node.get("/Caption") is not None
+                or node.get("/Title") is not None
+            )
+            if has_summary:
+                tables_with_summary += 1
+
+        try:
+            children = node.get("/K")
+        except Exception:
+            return
+        if children:
+            check_tables(children)
+
+    k_array = struct_tree.get("/K")
+    if k_array:
+        check_tables(k_array)
+
+    if tables_total == 0:
+        return ComplianceCheck(
+            check_id="WCAG-1.3.1-TBLSUM",
+            name="Table Summary",
+            description="No tables found in document",
+            status=CheckStatus.PASS.value,
+            level=ComplianceLevel.AA.value,
+            wcag_criteria="1.3.1",
+            pdfua_section="§5.7",
+            section508="502.3.2",
+            recommendation="No tables to check",
+            remediation_level="HUMAN_REVIEW"
+        )
+
+    if tables_with_summary < tables_total:
+        missing = tables_total - tables_with_summary
+        return ComplianceCheck(
+            check_id="WCAG-1.3.1-TBLSUM",
+            name="Table Summary",
+            description=f"{missing} of {tables_total} tables missing summary/caption",
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.AA.value,
+            wcag_criteria="1.3.1",
+            pdfua_section="§5.7",
+            section508="502.3.2",
+            location="Structure tree",
+            recommendation=f"Add /Summary or /Caption to {missing} tables to describe their purpose",
+            details={"total_tables": tables_total, "with_summary": tables_with_summary, "missing": missing},
+            remediation_level="HUMAN_REVIEW"
+        )
+
+    return ComplianceCheck(
+        check_id="WCAG-1.3.1-TBLSUM",
+        name="Table Summary",
+        description=f"All {tables_total} tables have summary/caption information",
+        status=CheckStatus.PASS.value,
+        level=ComplianceLevel.AA.value,
+        wcag_criteria="1.3.1",
+        pdfua_section="§5.7",
+        section508="502.3.2",
+        recommendation="All tables have descriptive summaries",
+        details={"total_tables": tables_total, "with_summary": tables_with_summary},
+        remediation_level="HUMAN_REVIEW"
+    )
+
+
+def check_fonts(pdf: pikepdf.Pdf) -> ComplianceCheck:
+    """Check font embedding and Unicode mapping."""
+    unembedded_fonts = []
+    missing_tounicode = []
+
+    for page_num, page in enumerate(pdf.pages, 1):
+        resources = page.get("/Resources", Dictionary())
+        fonts = resources.get("/Font", Dictionary())
+
+        if not fonts:
+            continue
+
+        for font_name, font in fonts.items():
+            if font is None:
+                continue
+
+            font_type = font.get("/Subtype")
+            font_name_str = str(font_name)
+
+            # Check for embedded fonts
+            if font_type in [Name("/Type1"), Name("/TrueType")]:
+                font_desc = font.get("/FontDescriptor")
+                if font_desc:
+                    font_file = font_desc.get("/FontFile") or font_desc.get("/FontFile2") or font_desc.get("/FontFile3")
+                    if not font_file:
+                        unembedded_fonts.append(f"{font_name_str} (Page {page_num})")
+
+            # Check for ToUnicode CMap
+            if not font.get("/ToUnicode"):
+                # Type 3 fonts don't always need ToUnicode
+                if font_type != Name("/Type3"):
+                    missing_tounicode.append(f"{font_name_str} (Page {page_num})")
+
+    issues = []
+    if unembedded_fonts:
+        issues.append(f"Unembedded: {', '.join(unembedded_fonts[:5])}")
+    if missing_tounicode:
+        issues.append(f"Missing Unicode: {', '.join(missing_tounicode[:5])}")
+
+    if issues:
+        return ComplianceCheck(
+            check_id="FONT-508",
+            name="Font Embedding",
+            description="; ".join(issues),
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.4.1, 1.3.2",
+            pdfua_section="§5.2",
+            section508="502.3.1",
+            location="Font resources",
+            recommendation="Embed all fonts and add ToUnicode CMap for screen reader text extraction",
+            details={"unembedded_fonts": unembedded_fonts, "missing_tounicode": missing_tounicode},
+            remediation_level="MANUAL_ONLY"
+        )
+
+    return ComplianceCheck(
+        check_id="FONT-508",
+        name="Font Embedding",
+        description="All fonts are properly embedded with Unicode mapping",
+        status=CheckStatus.PASS.value,
+        level=ComplianceLevel.A.value,
+        wcag_criteria="1.4.1, 1.3.2",
+        pdfua_section="§5.2",
+        section508="502.3.1",
+        recommendation="Fonts are properly embedded",
+        remediation_level="MANUAL_ONLY"
     )
 
 
@@ -955,9 +1567,10 @@ def check_security(pdf: pikepdf.Pdf) -> ComplianceCheck:
             pdfua_section="§5.1",
             section508="502.3.1",
             location="Document security",
-            recommendation="Remove encryption or ensure accessibility tools can access content"
+            recommendation="Remove encryption or ensure accessibility tools can access content",
+            remediation_level="MANUAL_ONLY"
         )
-    
+
     try:
         perms = pdf.allow
         if not perms.extract:
@@ -971,11 +1584,12 @@ def check_security(pdf: pikepdf.Pdf) -> ComplianceCheck:
                 pdfua_section="§5.1",
                 section508="502.3.1",
                 location="Document permissions",
-                recommendation="Enable content extraction for screen readers"
+                recommendation="Enable content extraction for screen readers",
+                remediation_level="MANUAL_ONLY"
             )
     except Exception:
         pass
-    
+
     return ComplianceCheck(
         check_id="SEC-508",
         name="Document Security",
@@ -985,7 +1599,8 @@ def check_security(pdf: pikepdf.Pdf) -> ComplianceCheck:
         wcag_criteria="4.1.2",
         pdfua_section="§5.1",
         section508="502.3.1",
-        recommendation="Security settings allow screen reader access"
+        recommendation="Security settings allow screen reader access",
+        remediation_level="MANUAL_ONLY"
     )
 
 
@@ -1024,7 +1639,8 @@ def run_compliance_check(pdf_path: Path) -> ComplianceReport:
                         wcag_criteria="N/A",
                         pdfua_section="N/A",
                         section508="N/A",
-                        recommendation=f"Manual check required: {str(e)}"
+                        recommendation=f"Manual check required: {str(e)}",
+                        remediation_level="MANUAL_CHECK"
                     ).__dict__)
 
             # Wrap remaining checks in try/except too
@@ -1040,7 +1656,8 @@ def run_compliance_check(pdf_path: Path) -> ComplianceReport:
                     wcag_criteria="1.3.1, 2.4.6",
                     pdfua_section="§5.4",
                     section508="502.3.2",
-                    recommendation="Manual heading check required"
+                    recommendation="Manual heading check required",
+                    remediation_level="HUMAN_REVIEW"
                 ).__dict__)
 
             try:
@@ -1055,7 +1672,8 @@ def run_compliance_check(pdf_path: Path) -> ComplianceReport:
                     wcag_criteria="1.1.1",
                     pdfua_section="§5.6",
                     section508="502.3.3",
-                    recommendation="Manual alt text check required"
+                    recommendation="Manual alt text check required",
+                    remediation_level="HUMAN_REVIEW"
                 ).__dict__)
 
             try:
@@ -1070,7 +1688,8 @@ def run_compliance_check(pdf_path: Path) -> ComplianceReport:
                     wcag_criteria="1.3.1",
                     pdfua_section="§5.7",
                     section508="502.3.2",
-                    recommendation="Manual table check required"
+                    recommendation="Manual table check required",
+                    remediation_level="HUMAN_REVIEW"
                 ).__dict__)
 
             try:
@@ -1085,7 +1704,8 @@ def run_compliance_check(pdf_path: Path) -> ComplianceReport:
                     wcag_criteria="1.3.1",
                     pdfua_section="§5.5",
                     section508="502.3.2",
-                    recommendation="Manual list check required"
+                    recommendation="Manual list check required",
+                    remediation_level="HUMAN_REVIEW"
                 ).__dict__)
 
             try:
@@ -1099,7 +1719,33 @@ def run_compliance_check(pdf_path: Path) -> ComplianceReport:
                 pass
 
             try:
+                checks.append(check_fonts(pdf))
+            except Exception as e:
+                pass
+
+            try:
                 checks.append(check_security(pdf))
+            except Exception as e:
+                pass
+
+            # New checks from Adobe Acrobat report parity
+            try:
+                checks.append(check_tab_order(pdf))
+            except Exception as e:
+                pass
+
+            try:
+                checks.extend(check_alt_text_quality(pdf))  # returns list
+            except Exception as e:
+                pass
+
+            try:
+                checks.append(check_table_regularity(pdf))
+            except Exception as e:
+                pass
+
+            try:
+                checks.append(check_table_summary(pdf))
             except Exception as e:
                 pass
 
@@ -1144,15 +1790,51 @@ def run_compliance_check(pdf_path: Path) -> ComplianceReport:
             "wcag_criteria": "N/A",
             "pdfua_section": "N/A",
             "section508": "N/A",
-            "recommendation": "File may be corrupted or inaccessible"
+            "recommendation": "File may be corrupted or inaccessible",
+            "remediation_level": "MANUAL_CHECK"
         }]
 
     return report
 
 
+def remediation_summary(report: ComplianceReport) -> dict:
+    """
+    Count checks by remediation level.
+
+    Returns dict with keys:
+      - auto_fixable: count of AUTO_FIXABLE checks
+      - human_review: count of HUMAN_REVIEW checks
+      - manual_only: count of MANUAL_ONLY checks
+      - manual_check: count of MANUAL_CHECK checks
+      - total: total number of checks
+    """
+    summary = {
+        "auto_fixable": 0,
+        "human_review": 0,
+        "manual_only": 0,
+        "manual_check": 0,
+        "total": 0,
+    }
+
+    for check in report.checks:
+        if isinstance(check, dict):
+            level = check.get("remediation_level", "MANUAL_CHECK")
+        else:
+            level = getattr(check, 'remediation_level', "MANUAL_CHECK")
+
+        summary["total"] += 1
+        key = level.lower()
+        if key in summary:
+            summary[key] += 1
+        else:
+            summary["manual_check"] += 1
+
+    return summary
+
+
 def generate_compliance_summary(report: ComplianceReport) -> str:
     """Generate human-readable compliance summary."""
-    
+
     lines = [
         "=" * 70,
         f"COMPLIANCE REPORT: {report.filename}",
@@ -1173,7 +1855,16 @@ def generate_compliance_summary(report: ComplianceReport) -> str:
         f"  Manual Check:  {report.manual_checks}",
         "",
     ]
-    
+
+    # Add remediation summary
+    rem = remediation_summary(report)
+    lines.append("Remediation Summary:")
+    lines.append(f"  Auto-fixable:    {rem['auto_fixable']}")
+    lines.append(f"  Human review:    {rem['human_review']}")
+    lines.append(f"  Manual only:     {rem['manual_only']}")
+    lines.append(f"  Manual check:    {rem['manual_check']}")
+    lines.append("")
+
     if report.failed > 0:
         lines.append("Failed Checks (Must Fix):")
         lines.append("-" * 50)
@@ -1184,7 +1875,7 @@ def generate_compliance_summary(report: ComplianceReport) -> str:
                 lines.append(f"    Issue: {check['description']}")
                 lines.append(f"    Fix: {check['recommendation']}")
                 lines.append("")
-    
+
     if report.warnings > 0:
         lines.append("Warnings (Should Review):")
         lines.append("-" * 50)
@@ -1192,30 +1883,65 @@ def generate_compliance_summary(report: ComplianceReport) -> str:
             if check['status'] == CheckStatus.WARNING.value:
                 lines.append(f"  ⚠ {check['name']}: {check['description']}")
         lines.append("")
-    
+
     return "\n".join(lines)
 
 
 def main():
     """Main entry point."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="ADA/WCAG/PDF-UA Compliance Checker")
-    parser.add_argument("pdf_path", type=Path, help="Path to PDF file")
+    parser.add_argument("pdf_path", type=Path, nargs="?", help="Path to PDF file (default: all in input_pdfs/)")
     parser.add_argument("--json", action="store_true", help="Output JSON format")
-    
+
     args = parser.parse_args()
-    
-    if not args.pdf_path.exists():
-        print(f"Error: File not found: {args.pdf_path}")
-        return
-    
-    report = run_compliance_check(args.pdf_path)
-    
-    if args.json:
-        print(json.dumps(asdict(report), indent=2))
+
+    if args.pdf_path:
+        # Single file mode
+        if not args.pdf_path.exists():
+            print(f"Error: File not found: {args.pdf_path}")
+            return
+
+        report = run_compliance_check(args.pdf_path)
+
+        if args.json:
+            print(json.dumps(asdict(report), indent=2))
+        else:
+            print(generate_compliance_summary(report))
     else:
-        print(generate_compliance_summary(report))
+        # Batch mode — process all PDFs in input_pdfs/
+        input_dir = Path(__file__).parent / "input_pdfs"
+        if not input_dir.exists():
+            print(f"Error: Input directory not found: {input_dir}")
+            return
+
+        pdf_files = list(input_dir.glob("*.pdf"))
+        if not pdf_files:
+            print(f"No PDF files found in: {input_dir}")
+            return
+
+        print(f"Found {len(pdf_files)} PDF file(s) to assess\n")
+
+        all_reports = []
+        for pdf_path in pdf_files:
+            print(f"Assessing: {pdf_path.name}")
+            try:
+                report = run_compliance_check(pdf_path)
+                all_reports.append(report)
+                status = "✓ PASS" if report.overall_status == "COMPLIANT" else f"✗ {report.overall_status} ({report.failed} failed)"
+                print(f"  -> {status}")
+            except Exception as e:
+                print(f"  -> ERROR: {e}")
+
+        # Print summaries
+        print("\n")
+        for report in all_reports:
+            if args.json:
+                print(json.dumps(asdict(report), indent=2))
+            else:
+                print(generate_compliance_summary(report))
+                print("\n" + "=" * 70 + "\n")
 
 
 if __name__ == "__main__":

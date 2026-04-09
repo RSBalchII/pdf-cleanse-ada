@@ -71,18 +71,6 @@ class PipelineResult:
     adobe_accessible: bool = False
 
 
-def import_assessment():
-    """Import ada_assessment module."""
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "ada_assessment",
-        SCRIPT_DIR / "ada_assessment.py"
-    )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def import_auto_fix():
     """Import ada_auto_fix module."""
     import importlib.util
@@ -108,22 +96,40 @@ def import_compliance_checker():
 
 
 def count_issues(pdf_path: Path) -> dict:
-    """Quick issue count for a PDF using the assessment module."""
-    assessment = import_assessment()
-    from ada_assessment import assess_pdf
-    result = assess_pdf(pdf_path)
+    """Quick issue count for a PDF using the compliance checker module."""
+    checker = import_compliance_checker()
+    from compliance_checker import run_compliance_check, remediation_summary
+    report = run_compliance_check(pdf_path)
+    rem = remediation_summary(report)
+
+    # Extract image/table counts from check details
+    image_count = 0
+    table_count = 0
+    is_tagged = False
+    for check in report.checks:
+        if isinstance(check, dict):
+            details = check.get("details") or {}
+            if check.get("check_id") == "WCAG-1.3.1-TAG" and check.get("status") == "PASS":
+                is_tagged = True
+            if "image_count" in details:
+                image_count = details["image_count"]
+            elif "total_xobjects" in details:
+                image_count = details["total_xobjects"]
+            if "total_tables" in details:
+                table_count = details["total_tables"]
+
     return {
-        "total_issues": result.total_issues,
-        "critical": result.critical_count,
-        "important": result.important_count,
-        "moderate": result.moderate_count,
-        "advisory": result.advisory_count,
-        "auto_fixable": result.auto_fixable_count,
-        "human_review": result.human_review_count,
-        "manual_only": result.manual_only_count,
-        "is_tagged": result.structure_info.get("has_struct_tree", False),
-        "image_count": result.structure_info.get("image_count", 0),
-        "table_count": result.structure_info.get("table_count", 0),
+        "total_issues": report.failed + report.warnings,
+        "critical": report.failed,
+        "important": report.warnings,
+        "moderate": 0,
+        "advisory": 0,
+        "auto_fixable": rem["auto_fixable"],
+        "human_review": rem["human_review"],
+        "manual_only": rem["manual_only"],
+        "is_tagged": is_tagged,
+        "image_count": image_count,
+        "table_count": table_count,
     }
 
 

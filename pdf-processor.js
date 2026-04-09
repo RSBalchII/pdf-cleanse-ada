@@ -24,7 +24,7 @@ const SCRIPT_DIR = __dirname;
 
 // Python scripts
 const PYTHON_SCRIPTS = {
-  assess: 'ada_assessment.py',
+  assess: 'compliance_checker.py',
   fix: 'ada_auto_fix.py',
   vision: 'vision_alt_text.py',
   process: 'ada_compliance_processor.py'

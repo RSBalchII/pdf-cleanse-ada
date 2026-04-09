@@ -18,7 +18,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { EventEmitter } from 'events';
 
-import { processPdf, generateCsvReport, ensureDirs, INPUT_DIR, DONE_DIR, NEEDS_REVIEW_DIR, RESULTS_DIR, AUTO_TAGGED_DIR } from './pdf-tools.js';
+import { processPdf, generateCsvReport, ensureDirs, INPUT_DIR, DONE_DIR, NEEDS_REVIEW_DIR, RESULTS_DIR, AUTO_TAGGED_DIR, ADOBE_FIXED_DIR, AUTO_FIXED_DIR } from './pdf-tools.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -589,8 +589,11 @@ print(json.dumps({
 
 // ── Helper: run a shell command ─────────────────────────────
 function runCommand(cmd, args, cwd) {
+  // On Windows, 'npm' is a .cmd file that needs shell execution.
+  // Direct exe paths (venv python/pip) must NOT use shell (DEP0190).
+  const needsShell = process.platform === 'win32' && cmd === 'npm';
   return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, args, { cwd, shell: process.platform === 'win32' });
+    const proc = spawn(cmd, args, { cwd, shell: needsShell });
     let stdout = '';
     let stderr = '';
 
