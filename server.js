@@ -35,7 +35,7 @@ function getPythonCmd() {
   const venvPython = process.platform === 'win32'
     ? path.join(VENV_DIR, 'Scripts', 'python.exe')
     : path.join(VENV_DIR, 'bin', 'python');
-  if (require('fs').existsSync(venvPython)) return venvPython;
+  if (existsSync(venvPython)) return venvPython;
   return process.platform === 'win32' ? 'python' : 'python3';
 }
 
@@ -43,7 +43,7 @@ function getPipCmd() {
   const venvPip = process.platform === 'win32'
     ? path.join(VENV_DIR, 'Scripts', 'pip.exe')
     : path.join(VENV_DIR, 'bin', 'pip');
-  if (require('fs').existsSync(venvPip)) return venvPip;
+  if (existsSync(venvPip)) return venvPip;
   return null; // no venv pip available
 }
 
@@ -124,7 +124,7 @@ app.post('/api/setup', async (req, res) => {
       terminalLog('Python found. Checking for virtual environment...', 'info');
 
       // Create venv if it doesn't exist
-      if (!require('fs').existsSync(VENV_DIR)) {
+      if (!existsSync(VENV_DIR)) {
         terminalLog('Creating Python virtual environment (.venv)...', 'info');
         const pyBase = process.platform === 'win32' ? 'python' : 'python3';
         await runCommand(pyBase, ['-m', 'venv', VENV_DIR], __dirname);
