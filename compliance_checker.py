@@ -1485,6 +1485,163 @@ def check_table_summary(pdf: pikepdf.Pdf) -> ComplianceCheck:
     )
 
 
+def check_image_only_pdf(pdf: pikepdf.Pdf) -> ComplianceCheck:
+    """Check if PDF is image-only (scanned document with no text layer)."""
+    has_text = False
+    image_pages = 0
+    total_pages = len(pdf.pages)
+
+    for page in pdf.pages:
+        resources = page.get("/Resources", Dictionary())
+
+        # Check for text content operators in content stream
+        contents = page.get("/Contents")
+        if contents:
+            try:
+                stream_data = contents.read_bytes() if hasattr(contents, 'read_bytes') else bytes(contents)
+                if b'Tj' in stream_data or b'TJ' in stream_data:
+                    has_text = True
+            except Exception:
+                pass
+
+        # Check for XObject images
+        xobjects = resources.get("/XObject", {})
+        if xobjects:
+            for key, xobj in xobjects.items():
+                if xobj and xobj.get("/Subtype") == Name("/Image"):
+                    image_pages += 1
+                    break  # At least one image on this page
+
+        # Also check for actual text via font resources
+        fonts = resources.get("/Font", {})
+        if fonts:
+            has_text = True
+
+    # Document is image-only if: has images, no text, and no structure tree
+    struct_tree = pdf.Root.get("/StructTreeRoot")
+    is_image_only = image_pages > 0 and not has_text and not struct_tree
+
+    if is_image_only:
+        return ComplianceCheck(
+            check_id="WCAG-1.1.1-SCAN",
+            name="Image-Only PDF",
+            description=f"All {total_pages} pages are images with no text layer (scanned document)",
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.1.1, 1.3.1",
+            pdfua_section="§5",
+            section508="502.3.2",
+            location="Page content",
+            recommendation="Run OCR to add a text layer (Adobe: Enhance Scans > Recognize Text)",
+            details={"total_pages": total_pages, "pages_with_images": image_pages},
+            remediation_level="MANUAL_ONLY"
+        )
+
+    return ComplianceCheck(
+        check_id="WCAG-1.1.1-SCAN",
+        name="Image-Only PDF",
+        description="Document has selectable text content" if has_text else "Document is not image-only",
+        status=CheckStatus.PASS.value,
+        level=ComplianceLevel.A.value,
+        wcag_criteria="1.1.1",
+        pdfua_section="§5",
+        section508="502.3.2",
+        recommendation="Document is not image-only" if has_text else "No images found",
+        details={"total_pages": total_pages, "has_text": has_text, "pages_with_images": image_pages},
+        remediation_level="MANUAL_ONLY"
+    )
+
+
+def check_bookmarks(pdf: pikepdf.Pdf) -> ComplianceCheck:
+    """WCAG 2.4.5 - Bookmarks for large documents (21+ pages)."""
+    page_count = len(pdf.pages)
+    outlines = pdf.Root.get("/Outlines")
+
+    has_bookmarks = False
+    bookmark_count = 0
+
+    if outlines:
+        has_bookmarks = True
+        # Count bookmarks by traversing outline tree
+        def count_outlines(node):
+            nonlocal bookmark_count
+            if node is None:
+                return
+            if _is_array(node):
+                for item in node:
+                    count_outlines(item)
+                return
+            if not _is_dict(node):
+                return
+            bookmark_count += 1
+            try:
+                first = node.get("/First")
+            except Exception:
+                return
+            if first:
+                count_outlines(first)
+            try:
+                next_item = node.get("/Next")
+            except Exception:
+                return
+            if next_item:
+                count_outlines(next_item)
+
+        try:
+            first_outline = outlines.get("/First")
+        except Exception:
+            first_outline = None
+        if first_outline:
+            count_outlines(first_outline)
+
+    # PDF/UA recommends bookmarks for documents with 21+ pages
+    if page_count >= 21:
+        if not has_bookmarks or bookmark_count == 0:
+            return ComplianceCheck(
+                check_id="WCAG-2.4.5-BM",
+                name="Bookmarks",
+                description=f"Large document ({page_count} pages) has no bookmarks",
+                status=CheckStatus.FAIL.value,
+                level=ComplianceLevel.AA.value,
+                wcag_criteria="2.4.5",
+                pdfua_section="§5.8",
+                section508="502.3.2",
+                location="Document Catalog /Outlines",
+                recommendation="Add bookmarks for navigation (Adobe: Bookmarks panel > New Bookmark)",
+                details={"page_count": page_count, "bookmark_count": 0},
+                remediation_level="HUMAN_REVIEW"
+            )
+
+        return ComplianceCheck(
+            check_id="WCAG-2.4.5-BM",
+            name="Bookmarks",
+            description=f"Document has {bookmark_count} bookmarks ({page_count} pages)",
+            status=CheckStatus.PASS.value,
+            level=ComplianceLevel.AA.value,
+            wcag_criteria="2.4.5",
+            pdfua_section="§5.8",
+            section508="502.3.2",
+            recommendation="Document has good bookmark navigation",
+            details={"page_count": page_count, "bookmark_count": bookmark_count},
+            remediation_level="HUMAN_REVIEW"
+        )
+
+    # Small document — bookmarks are nice but not required
+    return ComplianceCheck(
+        check_id="WCAG-2.4.5-BM",
+        name="Bookmarks",
+        description=f"Short document ({page_count} pages) — bookmarks not required",
+        status=CheckStatus.PASS.value,
+        level=ComplianceLevel.AA.value,
+        wcag_criteria="2.4.5",
+        pdfua_section="§5.8",
+        section508="502.3.2",
+        recommendation=f"Bookmarks optional for documents under 21 pages",
+        details={"page_count": page_count, "bookmark_count": bookmark_count},
+        remediation_level="HUMAN_REVIEW"
+    )
+
+
 def check_fonts(pdf: pikepdf.Pdf) -> ComplianceCheck:
     """Check font embedding and Unicode mapping."""
     unembedded_fonts = []
@@ -1746,6 +1903,16 @@ def run_compliance_check(pdf_path: Path) -> ComplianceReport:
 
             try:
                 checks.append(check_table_summary(pdf))
+            except Exception as e:
+                pass
+
+            try:
+                checks.append(check_image_only_pdf(pdf))
+            except Exception as e:
+                pass
+
+            try:
+                checks.append(check_bookmarks(pdf))
             except Exception as e:
                 pass
 
