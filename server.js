@@ -26,6 +26,27 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 3456;
 
+// ── Venv-aware Python resolution ────────────────────────────
+// On macOS/Linux, PEP 668 blocks `pip install` into the system Python.
+// We detect a `.venv` and use it if present; otherwise fall back to system Python.
+const VENV_DIR = path.join(__dirname, '.venv');
+
+function getPythonCmd() {
+  const venvPython = process.platform === 'win32'
+    ? path.join(VENV_DIR, 'Scripts', 'python.exe')
+    : path.join(VENV_DIR, 'bin', 'python');
+  if (require('fs').existsSync(venvPython)) return venvPython;
+  return process.platform === 'win32' ? 'python' : 'python3';
+}
+
+function getPipCmd() {
+  const venvPip = process.platform === 'win32'
+    ? path.join(VENV_DIR, 'Scripts', 'pip.exe')
+    : path.join(VENV_DIR, 'bin', 'pip');
+  if (require('fs').existsSync(venvPip)) return venvPip;
+  return null; // no venv pip available
+}
+
 // SSE event emitter for streaming terminal output
 const terminalEmitter = new EventEmitter();
 
@@ -97,13 +118,33 @@ app.post('/api/setup', async (req, res) => {
 
     // Install Python deps (optional — only if Python is available)
     terminalLog('Checking Python environment...', 'info');
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const pythonCmd = getPythonCmd();
     try {
       await runCommand(pythonCmd, ['--version'], __dirname);
-      terminalLog('Python found. Installing Python packages...', 'info');
-      await runCommand(pythonCmd, ['-m', 'pip', 'install', '-r', 'requirements.txt'], __dirname);
-    } catch {
-      terminalLog('Python not found — skipping Python dependencies. Core features will still work.', 'warning');
+      terminalLog('Python found. Checking for virtual environment...', 'info');
+
+      // Create venv if it doesn't exist
+      if (!require('fs').existsSync(VENV_DIR)) {
+        terminalLog('Creating Python virtual environment (.venv)...', 'info');
+        const pyBase = process.platform === 'win32' ? 'python' : 'python3';
+        await runCommand(pyBase, ['-m', 'venv', VENV_DIR], __dirname);
+        terminalLog('Virtual environment created.', 'success');
+      } else {
+        terminalLog('Virtual environment exists (.venv).', 'info');
+      }
+
+      // Use venv pip to install requirements
+      const pipCmd = getPipCmd();
+      if (pipCmd) {
+        terminalLog('Installing Python packages in virtual environment...', 'info');
+        await runCommand(pipCmd, ['install', '-r', 'requirements.txt'], __dirname);
+      } else {
+        terminalLog('Warning: venv pip not found. Trying system pip...', 'warning');
+        await runCommand(pythonCmd, ['-m', 'pip', 'install', '-r', 'requirements.txt'], __dirname);
+      }
+    } catch (err) {
+      terminalLog(`Python setup warning: ${err.message}`, 'warning');
+      terminalLog('Core Node.js features will still work. Python features need Python 3.10+.', 'warning');
     }
 
     // Ensure directories
@@ -289,7 +330,7 @@ app.get('/api/report/latest', async (req, res) => {
 
 // POST /api/deep-scan — Run Python compliance checker on all PDFs
 app.post('/api/deep-scan', async (req, res) => {
-  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  const pythonCmd = getPythonCmd();
 
   try {
     terminalLog('Running deep scan (Python compliance checker)...', 'accent');
@@ -383,7 +424,7 @@ app.post('/api/auto-tag', async (req, res) => {
 // POST /api/adobe-autotag — Run Adobe Cloud auto-tag using developer credentials
 app.post('/api/adobe-autotag', async (req, res) => {
   const { fileNames } = req.body;
-  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  const pythonCmd = getPythonCmd();
 
   // Check if credentials file exists
   const credsPath = path.join(__dirname, 'adobe_credentials.json');
@@ -462,7 +503,7 @@ except SystemExit:
 // POST /api/re-assess — Re-run compliance check on a specific PDF
 app.post('/api/re-assess', async (req, res) => {
   const { fileName } = req.body;
-  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  const pythonCmd = getPythonCmd();
 
   // Find the PDF
   const searchDirs = [INPUT_DIR, DONE_DIR, NEEDS_REVIEW_DIR, ADOBE_FIXED_DIR, AUTO_FIXED_DIR, AUTO_TAGGED_DIR];

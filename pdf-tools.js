@@ -6,14 +6,27 @@
 
 import pdfLib from 'pdf-lib';
 const { PDFDocument, PDFName, PDFDict } = pdfLib;
-import { promises as fs } from 'fs';
+import { promises as fs, existsSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const SCRIPT_DIR = __dirname;
 
-export const SCRIPT_DIR = __dirname;
+/**
+ * Resolve the Python interpreter to use.
+ * Prefers .venv/bin/python (macOS/Linux) or .venv\Scripts\python.exe (Windows)
+ * when a virtual environment exists; otherwise falls back to system Python.
+ */
+function getPythonCmd() {
+  const venvPython = process.platform === 'win32'
+    ? join(SCRIPT_DIR, '.venv', 'Scripts', 'python.exe')
+    : join(SCRIPT_DIR, '.venv', 'bin', 'python');
+  if (existsSync(venvPython)) return venvPython;
+  return process.platform === 'win32' ? 'python' : 'python3';
+}
+
 export const INPUT_DIR = join(SCRIPT_DIR, 'input_pdfs');
 export const DONE_DIR = join(SCRIPT_DIR, 'done');
 export const NEEDS_REVIEW_DIR = join(SCRIPT_DIR, 'needs_review');
@@ -214,7 +227,7 @@ export function checkCompliance(info) {
 export async function fixPdf(pdfBuffer, info, stem = '') {
   const { spawn } = await import('child_process');
 
-  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  const pythonCmd = getPythonCmd();
   const scriptPath = join(SCRIPT_DIR, 'pdf_fix_single.py');
 
   return new Promise((resolve, reject) => {

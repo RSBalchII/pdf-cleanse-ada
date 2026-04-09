@@ -96,11 +96,6 @@
     <header>
       <h1>📄 PDF ADA Compliance Processor</h1>
       <p>Accessibility assessment and remediation for WCAG/PDF-UA compliance</p>
-      <div id="authStatus" style="margin-top:0.75rem;display:flex;align-items:center;justify-content:center;gap:0.75rem;">
-        <span id="authBadge" class="badge" style="font-size:0.75rem;padding:0.25rem 0.75rem;">⚪ Not signed in</span>
-        <button class="btn" id="signInBtn" style="font-size:0.75rem;">🔐 Sign in with Adobe</button>
-        <button class="btn hidden" id="signOutBtn" style="font-size:0.75rem;color:var(--err);">Sign out</button>
-      </div>
     </header>
 
     <!-- Setup Banner -->
@@ -210,13 +205,9 @@ const deepScanPanel = document.getElementById('deepScanPanel');
 const deepScanSummary = document.getElementById('deepScanSummary');
 const deepScanDetails = document.getElementById('deepScanDetails');
 const resultsBody = document.getElementById('resultsBody');
-const signInBtn = document.getElementById('signInBtn');
-const signOutBtn = document.getElementById('signOutBtn');
-const authBadge = document.getElementById('authBadge');
 
-// ── Auth ─────────────────────────────────────────────────
-async function checkAuthStatus() {
-  // Check if credentials file exists by trying the auto-tag endpoint
+// ── Auth Status ──────────────────────────────────────────
+async function checkAdobeStatus() {
   try {
     const res = await fetch('/api/adobe-autotag', {
       method: 'POST',
@@ -225,45 +216,19 @@ async function checkAuthStatus() {
     });
 
     if (res.status === 401) {
-      // No credentials
-      authBadge.className = 'badge badge-err';
-      authBadge.textContent = '⚪ No credentials';
-      signInBtn.classList.remove('hidden');
-      signOutBtn.classList.add('hidden');
       adobeCloudBtn.disabled = true;
       adobeCloudBtn.title = 'Add adobe_credentials.json to enable Auto-Tag';
     } else {
-      // Credentials exist (endpoint didn't reject immediately)
-      authBadge.className = 'badge badge-ok';
-      authBadge.textContent = '✅ Credentials ready';
-      signInBtn.classList.add('hidden');
-      signOutBtn.classList.add('hidden');
       adobeCloudBtn.disabled = false;
       adobeCloudBtn.title = 'Ready to auto-tag PDFs';
     }
   } catch (err) {
-    // Server error — assume credentials exist but something else failed
-    authBadge.className = 'badge badge-ok';
-    authBadge.textContent = '✅ Credentials ready';
-    signInBtn.classList.add('hidden');
-    signOutBtn.classList.add('hidden');
+    // Server error — assume credentials exist
     adobeCloudBtn.disabled = false;
   }
 }
 
-signInBtn.addEventListener('click', () => {
-  termLog('To enable Adobe Cloud Auto-Tag:', 'accent');
-  termLog('  1. Get credentials at https://developer.adobe.com/console', 'info');
-  termLog('  2. Create adobe_credentials.json with client_id and client_secret', 'info');
-  termLog('  3. Refresh this page', 'info');
-});
-
-signOutBtn.addEventListener('click', async () => {
-  termLog('Credentials file cannot be cleared from browser. Remove adobe_credentials.json manually.', 'warning');
-});
-
-// Check auth on page load
-checkAuthStatus();
+checkAdobeStatus();
 
 // ── Terminal logger ────────────────────────────────────
 function termLog(msg, type = 'info') {
