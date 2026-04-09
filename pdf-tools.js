@@ -233,7 +233,7 @@ export async function fixPdf(pdfBuffer, info, stem = '') {
   const scriptPath = join(SCRIPT_DIR, 'pdf_fix_single.py');
 
   return new Promise((resolve, reject) => {
-    const proc = spawn(pythonCmd, [scriptPath, stem], {
+    const proc = spawn(pythonCmd, ['-u', scriptPath, stem], {
       cwd: SCRIPT_DIR,
       stdio: ['pipe', 'pipe', 'pipe']
     });

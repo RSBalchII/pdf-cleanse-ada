@@ -335,7 +335,7 @@ app.post('/api/deep-scan', async (req, res) => {
   try {
     terminalLog('Running deep scan (Python compliance checker)...', 'accent');
 
-    const proc = spawn(pythonCmd, [path.join(__dirname, 'deep_scan.py'), INPUT_DIR], {
+    const proc = spawn(pythonCmd, ['-u', path.join(__dirname, 'deep_scan.py'), INPUT_DIR], {
       cwd: __dirname,
       stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -439,7 +439,7 @@ app.post('/api/adobe-autotag', async (req, res) => {
     terminalLog('Uploading PDFs to Adobe API, auto-tagging, and downloading.', 'info');
 
     const proc = spawn(pythonCmd, [
-      '-c',
+      '-u', '-c',
       `
 import sys, json, os
 sys.path.insert(0, '.')
@@ -538,7 +538,7 @@ app.post('/api/re-assess', async (req, res) => {
 
   // Run Python compliance checker on just this one file
   const proc = spawn(pythonCmd, [
-    '-c',
+    '-u', '-c',
     `
 import sys, json
 sys.path.insert(0, '.')
