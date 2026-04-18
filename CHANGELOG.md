@@ -4,7 +4,12 @@ All notable changes to the PDF ADA Compliance Processor.
 
 ## [Unreleased]
 
-### Added
+### Changed
+- **Library Migration** — Migrated from `pikepdf` to `_pdf_utils` (using `pypdfium2`) for faster text extraction, image analysis, and robust metadata handling.
+- **Compliance Checks** — Implemented missing Link Purpose check (`check_links`, WCAG 2.4.4) using utility layer; refactored Image counting (`count_images`) to use modern utilities.
+
+### Fixed
+- **Outdated Dependencies** — Replaced deprecated `pikepdf` usage across project with `_pdf_utils` wrapper, resolving issues with outdated parsing and lack of modern security features.
 - `--auto` flag for `adobe_autotag_api.py` (non-interactive batch mode)
 - `--auto` flag for `batch_auto_tag_acrobat.py` (non-interactive batch mode)
 - `batch_auto_tag_acrobat.py` — Acrobat Pro COM batch processor
