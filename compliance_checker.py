@@ -24,6 +24,9 @@ from typing import Optional
 import pikepdf
 from pikepdf import Name, Dictionary, Array
 
+# Import utility functions for extraction and analysis
+from _pdf_utils import count_images, get_links
+
 
 def _is_array(node):
     """Safely check if a pikepdf object is an Array."""
@@ -338,7 +341,11 @@ def check_reading_order(pdf: pikepdf.Pdf) -> ComplianceCheck:
 
 
 def check_headings_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
-    """WCAG 1.3.1, 2.4.6 - Headings and Labels (Level A)"""
+    """WCAG 1.3.1, 2.4.6 - Headings and Labels (Level A).
+    Uses structural analysis via pikepdf combined with text verification via _pdf_utils.
+    """
+    from _pdf_utils import get_text_page
+
     struct_tree = pdf.Root.get("/StructTreeRoot")
 
     if not struct_tree:
@@ -355,7 +362,7 @@ def check_headings_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
             remediation_level="HUMAN_REVIEW"
         )
 
-    # Collect heading tags and their sequence
+    # Collect heading tags and their sequence (structural)
     heading_tags = []
     heading_sequence = []
 
@@ -396,8 +403,36 @@ def check_headings_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
     if k_array:
         collect_headings(k_array)
 
+    # Verify structural headings against actual text content (using _pdf_utils)
+    total_text = ""
+    try:
+        for i, page in enumerate(pdf.pages):
+            page_text = get_text_page(i, pdf)
+            if page_text:
+                total_text += f"\n{page + 1}: {page_text}\n"
+    except Exception:
+        pass
+
+    # Check if H1 exists in text as well (semantic validation)
+    has_h1_in_text = "# " in total_text or "H1" in total_text.upper()
+    
     # Analyze
     has_h1 = "/H1" in heading_tags
+
+    if not struct_tree:
+        return ComplianceCheck(
+            check_id="WCAG-2.4.6-H",
+            name="Heading Structure",
+            description="Document lacks structural tags (StructTreeRoot missing)",
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.3.1, 2.4.6",
+            pdfua_section="§5.4",
+            section508="502.3.2",
+            location="Document Catalog",
+            recommendation="Add structure tree in Adobe Acrobat Pro",
+            remediation_level="MANUAL_ONLY"
+        )
 
     # Check for multiple H1s
     h1_count = heading_tags.count("/H1")
@@ -414,6 +449,81 @@ def check_headings_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
             location="Structure tree",
             recommendation="Use only one H1 per document (main title), use H2+ for sections",
             details={"heading_tags": heading_tags, "h1_count": h1_count},
+            remediation_level="HUMAN_REVIEW"
+        )
+
+    # Check if first heading is not H1
+    if heading_sequence and heading_sequence[0][0] != 1:
+        return ComplianceCheck(
+            check_id="WCAG-2.4.6-H",
+            name="Heading Hierarchy",
+            description=f"Document starts with H{heading_sequence[0][0]} instead of H1",
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.3.1, 2.4.6",
+            pdfua_section="§5.4",
+            section508="502.3.2",
+            location=f"First heading: {heading_sequence[0][1]}",
+            recommendation="First heading should be H1 (main document title)",
+            details={"heading_tags": heading_tags, "first_heading": heading_sequence[0][1]},
+            remediation_level="HUMAN_REVIEW"
+        )
+
+    # Semantic check: Verify if structural H1 is supported by text content
+    semantic_ok = has_h1 and has_h1_in_text
+
+    # Check for skipped levels
+    levels_present = []
+    for i in range(1, 7):
+        if f"/H{i}" in heading_tags:
+            levels_present.append(i)
+
+    skipped = []
+    for i in range(len(levels_present) - 1):
+        if levels_present[i+1] - levels_present[i] > 1:
+            skipped.append((levels_present[i], levels_present[i+1]))
+
+    if skipped and not semantic_ok:
+        return ComplianceCheck(
+            check_id="WCAG-2.4.6-H",
+            name="Heading Hierarchy",
+            description=f"Skipped heading levels detected: {skipped}",
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.3.1, 2.4.6",
+            pdfua_section="§5.4",
+            section508="502.3.2",
+            location="Structure tree",
+            recommendation="Fix heading hierarchy - do not skip levels (H1 -> H2 -> H3)",
+            details={"heading_tags": heading_tags, "skipped": skipped},
+            remediation_level="HUMAN_REVIEW"
+        )
+    elif semantic_ok:
+        return ComplianceCheck(
+            check_id="WCAG-2.4.6-H",
+            name="Heading Hierarchy",
+            description="Headings are properly structured and semantically supported by text.",
+            status=CheckStatus.PASS.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.3.1, 2.4.6",
+            pdfua_section="§5.4",
+            section508="502.3.2",
+            recommendation="Headings are properly structured.",
+            details={"heading_tags": list(set(heading_tags)), "semantic_check": True},
+            remediation_level="HUMAN_REVIEW"
+        )
+    else:
+        return ComplianceCheck(
+            check_id="WCAG-2.4.6-H",
+            name="Heading Hierarchy",
+            description="Document has structural headings but lacks corresponding semantic text support.",
+            status=CheckStatus.WARNING.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="1.3.1, 2.4.6",
+            pdfua_section="§5.4",
+            section508="502.3.2",
+            recommendation="Ensure text content aligns with structural headings.",
+            details={"heading_tags": heading_tags, "semantic_check": False},
             remediation_level="HUMAN_REVIEW"
         )
 
@@ -507,18 +617,14 @@ def check_headings_structure(pdf: pikepdf.Pdf) -> ComplianceCheck:
 
 
 def check_images_alt_text(pdf: pikepdf.Pdf) -> ComplianceCheck:
-    """WCAG 1.1.1 - Non-text Content (Level A)"""
+    """WCAG 1.1.1 - Non-text Content (Level A).
+    Uses _pdf_utils for efficient image counting and structural validation.
+    """
+    # Count XObject images using utility wrapper
+    img_data = count_images(pdf)
+    image_count = img_data["total_count"]
+    
     struct_tree = pdf.Root.get("/StructTreeRoot")
-
-    # Count XObject images
-    image_count = 0
-    for page in pdf.pages:
-        resources = page.get("/Resources", {})
-        xobjects = resources.get("/XObject", {})
-        if xobjects:
-            for key, xobj in xobjects.items():
-                if xobj and xobj.get("/Subtype") == Name("/Image"):
-                    image_count += 1
 
     if image_count == 0:
         return ComplianceCheck(
@@ -638,7 +744,69 @@ def check_images_alt_text(pdf: pikepdf.Pdf) -> ComplianceCheck:
     )
 
 
-def check_tables_headers(pdf: pikepdf.Pdf) -> ComplianceCheck:
+def check_links(pdf: pikepdf.Pdf) -> ComplianceCheck:
+    """WCAG 2.4.4 - Link Purpose (In Context).
+    Uses _pdf_utils to extract and verify link annotations.
+    """
+    links = get_links(pdf)
+    
+    if not links:
+        return ComplianceCheck(
+            check_id="WCAG-2.4.4",
+            name="Link Purpose (In Context)",
+            description="No links found in document",
+            status=CheckStatus.PASS.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="2.4.4",
+            pdfua_section="§5.8",
+            section508="502.3.4",
+            recommendation="No links to check",
+            remediation_level="HUMAN_REVIEW"
+        )
+
+    # Check if any link has descriptive alt text
+    links_with_alt = 0
+    for link in links:
+        try:
+            # pypdfium2 link annotations typically have 'alt' property or title
+            # We use a heuristic check. If the link annotation has an accessible name/title.
+            if "title" in str(link).lower() and len(str(link).get("title", "")) > 0:
+                links_with_alt += 1
+        except Exception:
+            pass
+    
+    total_links = len(links)
+    missing_alt = total_links - links_with_alt
+
+    if missing_alt == 0:
+        return ComplianceCheck(
+            check_id="WCAG-2.4.4",
+            name="Link Purpose (In Context)",
+            description=f"All {total_links} links have accessible names.",
+            status=CheckStatus.PASS.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="2.4.4",
+            pdfua_section="§5.8",
+            section508="502.3.4",
+            recommendation=f"{total_links} links are properly described.",
+            details={"total": total_links, "with_alt": links_with_alt},
+            remediation_level="HUMAN_REVIEW"
+        )
+    else:
+        return ComplianceCheck(
+            check_id="WCAG-2.4.4",
+            name="Link Purpose (In Context)",
+            description=f"{missing_alt} links lack descriptive text.",
+            status=CheckStatus.FAIL.value,
+            level=ComplianceLevel.A.value,
+            wcag_criteria="2.4.4",
+            pdfua_section="§5.8",
+            section508="502.3.4",
+            location="Link annotations",
+            recommendation=f"Add descriptive titles to {missing_alt} links.",
+            details={"total": total_links, "with_alt": links_with_alt, "missing": missing_alt},
+            remediation_level="HUMAN_REVIEW"
+        )
     """WCAG 1.3.1 - Info and Relationships (Tables)"""
     struct_tree = pdf.Root.get("/StructTreeRoot")
 

@@ -206,7 +206,7 @@ const deepScanSummary = document.getElementById('deepScanSummary');
 const deepScanDetails = document.getElementById('deepScanDetails');
 const resultsBody = document.getElementById('resultsBody');
 
-// ── Auth Status ──────────────────────────────────────────
+// ── Check Adobe Status ────────────────────────────────────
 async function checkAdobeStatus() {
   try {
     const res = await fetch('/api/adobe-autotag', {
@@ -228,7 +228,47 @@ async function checkAdobeStatus() {
   }
 }
 
+// ── Check Installation Status on Startup ───────────────────
+async function checkInstallationStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const status = await res.json();
+    
+    if (!status.ready) {
+      let missingRequired = [];
+      let hasWarnings = false;
+      
+      status.components.forEach(comp => {
+        if (!comp.ok && comp.required) {
+          missingRequired.push(comp.name);
+        } else if (!comp.ok && !comp.required) {
+          hasWarnings = true;
+        }
+      });
+
+      if (missingRequired.length > 0) {
+        setupText.innerHTML = `⚠️ Missing dependencies: ${missingRequired.join(', ')}. Click <strong>Setup</strong> to install.`;
+        setupBanner.classList.remove('ready');
+      } else if (hasWarnings) {
+        setupText.innerHTML = 'ℹ️ Some optional features may be limited. Click <strong>Setup</strong> for full functionality.';
+        setupBanner.classList.add('ready');
+        setupBanner.style.background = 'var(--warn)';
+      }
+    } else {
+      isSetup = true;
+      setupBanner.classList.add('ready');
+      setupText.innerHTML = '✅ All dependencies installed. Project is ready!';
+      setupBtn.textContent = 'Done';
+      setupBtn.classList.add('btn-success');
+      termLog('System status: Ready ✓', 'success');
+    }
+  } catch (err) {
+    termLog(`Status check error: ${err.message}`, 'warning');
+  }
+}
+
 checkAdobeStatus();
+checkInstallationStatus();
 
 // ── Terminal logger ────────────────────────────────────
 function termLog(msg, type = 'info') {
@@ -692,6 +732,7 @@ function guidanceCard(g, type) {
 }
 
 // ── Init ───────────────────────────────────────────────
+checkInstallationStatus(); // Check status first
 connectTerminal();
 refreshFileList();
 </script>

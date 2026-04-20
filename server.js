@@ -19,6 +19,7 @@ import { fileURLToPath } from 'url';
 import { EventEmitter } from 'events';
 
 import { processPdf, generateCsvReport, ensureDirs, INPUT_DIR, DONE_DIR, NEEDS_REVIEW_DIR, RESULTS_DIR, AUTO_TAGGED_DIR, ADOBE_FIXED_DIR, AUTO_FIXED_DIR } from './pdf-tools.js';
+import { getStatus, autoInstallDependencies } from './install_detector.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -86,6 +87,17 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// GET /api/status — Get installation status report
+app.get('/api/status', async (req, res) => {
+  try {
+    const status = await getStatus();
+    res.json(status);
+  } catch (err) {
+    terminalLog(`Status check failed: ${err.message}`, 'error');
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // SSE endpoint: /terminal-stream
 app.get('/terminal-stream', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
@@ -112,46 +124,27 @@ app.post('/api/setup', async (req, res) => {
   terminalLog('Starting dependency setup...', 'accent');
 
   try {
-    // Install npm deps
-    terminalLog('Installing npm packages...', 'info');
-    await runCommand('npm', ['install'], __dirname);
+    const installResults = await autoInstallDependencies();
 
-    // Install Python deps (optional — only if Python is available)
-    terminalLog('Checking Python environment...', 'info');
-    const pythonCmd = getPythonCmd();
-    try {
-      await runCommand(pythonCmd, ['--version'], __dirname);
-      terminalLog('Python found. Checking for virtual environment...', 'info');
+    if (!installResults.npm.success) {
+      terminalLog(`npm installation failed: ${installResults.npm.error}`, 'error');
+      return res.status(500).json({ success: false, error: installResults.npm.error });
+    }
 
-      // Create venv if it doesn't exist
-      if (!existsSync(VENV_DIR)) {
-        terminalLog('Creating Python virtual environment (.venv)...', 'info');
-        const pyBase = process.platform === 'win32' ? 'python' : 'python3';
-        await runCommand(pyBase, ['-m', 'venv', VENV_DIR], __dirname);
-        terminalLog('Virtual environment created.', 'success');
-      } else {
-        terminalLog('Virtual environment exists (.venv).', 'info');
-      }
-
-      // Use venv pip to install requirements
-      const pipCmd = getPipCmd();
-      if (pipCmd) {
-        terminalLog('Installing Python packages in virtual environment...', 'info');
-        await runCommand(pipCmd, ['install', '-r', 'requirements.txt'], __dirname);
-      } else {
-        terminalLog('Warning: venv pip not found. Trying system pip...', 'warning');
-        await runCommand(pythonCmd, ['-m', 'pip', 'install', '-r', 'requirements.txt'], __dirname);
-      }
-    } catch (err) {
-      terminalLog(`Python setup warning: ${err.message}`, 'warning');
-      terminalLog('Core Node.js features will still work. Python features need Python 3.10+.', 'warning');
+    if (!installResults.python.success) {
+      terminalLog(`Python setup warning: ${installResults.python.error}`, 'warning');
     }
 
     // Ensure directories
     await ensureDirs();
 
+    const status = await getStatus();
+    
     terminalLog('Setup complete! All dependencies installed.', 'success');
-    res.json({ success: true, message: 'Setup complete' });
+    if (status.warnings.length > 0) {
+      status.warnings.forEach(w => terminalLog(`Warning: ${w}`, 'warning'));
+    }
+    res.json({ success: true, message: 'Setup complete', status });
   } catch (err) {
     terminalLog(`Setup failed: ${err.message}`, 'error');
     res.status(500).json({ success: false, error: err.message });
@@ -331,13 +324,22 @@ app.get('/api/report/latest', async (req, res) => {
 // POST /api/deep-scan — Run Python compliance checker on all PDFs
 app.post('/api/deep-scan', async (req, res) => {
   const pythonCmd = getPythonCmd();
+  const acrobatPath = getAcrobatPath();
+  
+  // If we found Acrobat, add its directory to PATH for the subprocess
+  const env = { ...process.env };
+  if (process.platform === 'win32' && acrobatPath !== 'acrobat.exe') {
+    const acrobatDir = path.dirname(acrobatPath);
+    env.Path = `${env.Path || ''};${acrobatDir}`;
+  }
 
   try {
     terminalLog('Running deep scan (Python compliance checker)...', 'accent');
 
     const proc = spawn(pythonCmd, ['-u', path.join(__dirname, 'deep_scan.py'), INPUT_DIR], {
       cwd: __dirname,
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env
     });
 
     let stdout = '';
@@ -380,6 +382,7 @@ app.post('/api/deep-scan', async (req, res) => {
 // POST /api/auto-tag — Open a PDF in Acrobat and prompt user to auto-tag
 app.post('/api/auto-tag', async (req, res) => {
   const { fileName } = req.body;
+  const acrobatPath = getAcrobatPath();
 
   // Search for the PDF in all possible directories
   const searchDirs = [INPUT_DIR, DONE_DIR, NEEDS_REVIEW_DIR, ADOBE_FIXED_DIR, AUTO_FIXED_DIR];
@@ -618,9 +621,71 @@ function runCommand(cmd, args, cwd) {
   });
 }
 
+// ── Acrobat path resolution ────────────────────────────────
+function getAcrobatPath() {
+  if (process.platform !== 'win32') return 'acrobat.exe';
+
+  const candidates = [
+    'C:\\Program Files\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe',
+    'C:\\Program Files (x86)\\Adobe\\Acrobat DC\\Acrobat\\Acrobat.exe',
+    'C:\\Program Files\\Adobe\\Acrobat\\Acrobat\\Acrobat.exe',
+  ];
+
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  return 'acrobat.exe'; // fallback to PATH
+}
+
 // ── Start Server ────────────────────────────────────────────
 async function start() {
   await ensureDirs();
+
+  // Run initial installation detection (non-blocking)
+  terminalLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'accent');
+  terminalLog('Checking system readiness...', 'bold');
+  terminalLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'accent');
+
+  getStatus().then(status => {
+    const allReady = status.ready;
+    const issues = [];
+    const warnings = [];
+
+    status.components.forEach(comp => {
+      if (!comp.ok) {
+        if (comp.required) {
+          issues.push(comp.name);
+        } else {
+          warnings.push(comp.name);
+        }
+      }
+    });
+
+    if (allReady) {
+      terminalLog('✓ System ready! All dependencies detected.', 'success');
+      terminalLog(`  Platform: ${status.platform} | ${status.components.length} components checked`, 'info');
+    } else {
+      if (issues.length > 0) {
+        terminalLog('✗ Missing required dependencies:', 'error');
+        issues.forEach(issue => terminalLog(`  - ${issue}`, 'error'));
+        terminalLog('  → Click "Install Dependencies" to set up the project.', 'accent');
+      } else if (warnings.length > 0) {
+        terminalLog('⚠ Optional dependencies missing:', 'warning');
+        warnings.forEach(warn => terminalLog(`  - ${warn}`, 'warning'));
+        terminalLog('  → Core functionality is available. Additional features may be limited.', 'info');
+      }
+    }
+
+    if (status.suggestions && status.suggestions.length > 0) {
+      terminalLog('ℹ Recommendations:', 'accent');
+      status.suggestions.forEach(s => terminalLog(`  • ${s.message}`, 'info'));
+    }
+
+    terminalLog('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'accent');
+  }).catch(err => {
+    terminalLog(`Status check error: ${err.message}`, 'warning');
+    terminalLog('  → Click "Install Dependencies" to set up the project.', 'accent');
+  });
 
   app.listen(PORT, () => {
     const url = `http://localhost:${PORT}`;

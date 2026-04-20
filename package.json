@@ -7,9 +7,20 @@
   "scripts": {
     "start": "node server.js",
     "setup": "npm install && pip install -r requirements.txt",
-    "serve": "node server.js"
+    "serve": "node server.js",
+    "build": "pkg --config pkg.config.cjs",
+    "postbuild": "powershell -Command \"if (Test-Path pdf-ada-processor.exe) { Remove-Item pdf-ada-processor.exe -Force }\""
   },
-  "keywords": ["pdf", "ada", "accessibility", "wcag", "section508"],
+  "bin": {
+    "pdf-ada-processor": "./server.js"
+  },
+  "keywords": [
+    "pdf",
+    "ada",
+    "accessibility",
+    "wcag",
+    "section508"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
