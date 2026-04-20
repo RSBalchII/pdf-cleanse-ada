@@ -1,15 +1,16 @@
 module.exports = {
-  name: 'pdf-ada-processor',
-  version: '2.0.0',
+  // Specify which Node.js versions and architectures to build for
+  targets: ['node18-win-x64', 'node18-win-arm64'],
+  // Name of the output binary (without extension)
+  outputName: 'pdf-ada-processor',
+  // Where the binary will be placed
   outputPath: '.',
-  mainScript: 'server.js',
+  // Entry point of the application
+  main: 'server.js',
+  // No extra arguments
   args: [],
-  silent: false,
-  packager: 'pkg',
+  // Whether to compress the binary
   compress: true,
-  debug: false,
-  asmModTransform: true,
-  afterBuild: '',
-  scripts: {},
-  plugins: []
+  // Keep logs minimal
+  silent: true
 };

@@ -1,0 +1,11 @@
+# PDF Cleaning Pipeline Status
+
+**Status:** Output folders are empty.
+**Action Required:** Re-run the pipeline.
+
+**Command:** `python pipeline.py`
+
+**Expected Result:**
+*   19 PDFs from `input_pdfs/` will be processed.
+*   Files will be moved to `needs_review/` or `done/` based on compliance.
+*   Logs will be generated in `pipeline_results/`.

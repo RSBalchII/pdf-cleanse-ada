@@ -30,6 +30,7 @@ def process_pdf(input_path, sample_pdf=None):
     """
     if sample_pdf is None:
         # If no sample PDF is provided, fail gracefully with a descriptive error
+        return {"status": "error", "message": "No sample PDF provided"}
     return {"status": "success", "size_bytes": 0}
 def run_full_pipeline_flow(sample_pdf):
     """

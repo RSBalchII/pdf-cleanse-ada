@@ -1,0 +1,19 @@
+# Pipeline Status Report
+
+**Current Status:** The output folders (`needs_review`, `adobe_fixed`) are empty.
+
+**Action:** The previous run was interrupted, so the files were not saved.
+
+**Command:**
+Run the following in your terminal to re-process all 19 PDFs:
+
+```bash
+python pipeline.py
+```
+
+**Expected Result:**
+*   The pipeline will scan all PDFs in `input_pdfs/`.
+*   It will apply Python Auto-Fixes and Adobe Auto-Fixes.
+*   Compliant files will be moved to `done/`.
+*   Non-compliant files will be moved to `needs_review/`.
+*   Logs will be saved to `pipeline_results/`.

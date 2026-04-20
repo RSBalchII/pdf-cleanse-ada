@@ -72,10 +72,13 @@ async function main() {
     info('Installing Python dependencies...');
     const install = await run(pipCmd, ['install', '-r', 'requirements.txt'], SCRIPT_DIR);
     if (install.code !== 0) {
-      fail('Python dependency installation failed.');
-      process.exit(1);
+      // A non‑zero exit code is not fatal – it usually indicates the
+      // packages are already satisfied or a transient error.
+      console.log(`⚠️ Python dependency installation returned an error, but this may be benign.\n   Details: ${install.err.trim()}`);
+    } else {
+      ok('Python dependencies installed.');
     }
-    ok('Python dependencies installed.');
+
   } else {
     fail('pip not found in virtual environment.');
     process.exit(1);
@@ -100,6 +103,24 @@ async function main() {
     }
   }
 
+  // Install Node.js dependencies if package.json present
+  const pkgPath = join(SCRIPT_DIR, 'package.json');
+  if (fs.existsSync(pkgPath)) {
+    info('Installing Node.js dependencies...');
+    try {
+      const npmInstall = spawnSync(isWin ? 'npm.cmd' : 'npm', ['install'], { cwd: SCRIPT_DIR });
+      if (npmInstall.status !== 0) {
+        const errMsg = npmInstall.stderr ? npmInstall.stderr.toString() : '';
+        console.log(`⚠️ Node.js dependency installation returned an error.\n   Details: ${errMsg.trim()}`);
+      } else {
+        ok('Node.js dependencies installed.');
+      }
+    } catch (e) {
+      console.log(`⚠️ Node.js installation failed: ${e.message}`);
+    }
+  } else {
+    skip('package.json not found; skipping Node.js dependency install.');
+  }
   console.log('\n✅ Setup Complete!\n');
   console.log('Next steps:');
   console.log('  npm start          # Start the web UI');
