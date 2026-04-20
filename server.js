@@ -37,7 +37,25 @@ function getPythonCmd() {
     ? path.join(VENV_DIR, 'Scripts', 'python.exe')
     : path.join(VENV_DIR, 'bin', 'python');
   if (existsSync(venvPython)) return venvPython;
-  return process.platform === 'win32' ? 'python' : 'python3';
+
+  // macOS/Linux: Prefer python3, fallback to python for legacy systems
+  const python3 = 'python3';
+  const python = 'python';
+
+  // Check if python3 is available (standard on macOS)
+  try {
+    execSync(`command -v ${python3}`, { encoding: 'utf8' });
+    return python3;
+  } catch (e) {}
+
+  // If python3 not found, try python (legacy)
+  try {
+    execSync(`command -v ${python}`, { encoding: 'utf8' });
+    return python;
+  } catch (e) {}
+
+  // Neither found; fallback to python3 to provide a clear error
+  return python3;
 }
 
 function getPipCmd() {
