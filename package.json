@@ -17,6 +17,5 @@
     "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
-    "pkg": "^8.0.0"
   }
 }
