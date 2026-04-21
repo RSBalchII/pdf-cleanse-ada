@@ -36,9 +36,23 @@ ADOBE_ASSETS_URL = "https://pdf-services.adobe.io/assets"
 ADOBE_AUTOTAG_URL = "https://pdf-services.adobe.io/operation/autotag"
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
+
+# Load user settings from centralized JSON file
+SETTINGS_FILE = SCRIPT_DIR / "user_settings.json"
+try:
+    with open(SETTINGS_FILE, "r") as f:
+        USER_SETTINGS = json.load(f)
+except Exception as e:
+    print(f"Warning: Could not load {SETTINGS_FILE}: {e}. Using defaults.")
+    USER_SETTINGS = {"adobe_api": {}, "compliance_rules": [], "pdf_processing": {}, "output": {}}
+
 INPUT_DIR = SCRIPT_DIR / "input_pdfs"
 OUTPUT_DIR = SCRIPT_DIR / "adobe_tagged"
-CONFIG_PATH = SCRIPT_DIR / "adobe_credentials.json"
+# Allow configurable output folder via user_settings.json or use default
+OUTPUT_FOLDER_KEY = USER_SETTINGS.get("output", {}).get("folder") or "adobe_tagged"
+OUTPUT_DIR = SCRIPT_DIR / OUTPUT_FOLDER_KEY
+
+CONFIG_PATH = SCRIPT_DIR / "adobe_credentials.json.template"  # Keep template as reference
 REPORT_PATH = OUTPUT_DIR / "adobe_auto_tag_report.json"
 
 
@@ -46,13 +60,13 @@ class AdobeAPI:
     """Handles Adobe PDF Services API authentication and operations."""
 
     def __init__(self, client_id: str = None, client_secret: str = None):
-        self.client_id = client_id
+        self.client_id = client_id or USER_SETTINGS.get("adobe_api", {}).get("key")
         self.client_secret = client_secret
         self.access_token = None
         self.token_expires = 0
         self.session = requests.Session()
-        if client_id:
-            self.session.headers.update({"x-api-key": client_id})
+        if self.client_id:
+            self.session.headers.update({"x-api-key": self.client_id})
 
     def get_token(self) -> str:
         """Get or refresh OAuth access token."""

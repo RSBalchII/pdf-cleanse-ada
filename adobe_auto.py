@@ -29,6 +29,17 @@ except ImportError:
 
 # Configuration
 SCRIPT_DIR = Path(__file__).parent.resolve()
+
+# Load user settings from centralized JSON file
+SETTINGS_FILE = SCRIPT_DIR / "user_settings.json"
+try:
+    import json
+    with open(SETTINGS_FILE, "r") as f:
+        USER_SETTINGS = json.load(f)
+except Exception as e:
+    print(f"Warning: Could not load {SETTINGS_FILE}: {e}. Using defaults.")
+    USER_SETTINGS = {"adobe_api": {}, "compliance_rules": [], "pdf_processing": {}, "output": {}}
+
 INPUT_DIR = SCRIPT_DIR / "input_pdfs"
 ADOBE_FIXED_DIR = SCRIPT_DIR / "adobe_fixed"
 ADOBE_REPORTS_DIR = SCRIPT_DIR / "adobe_reports"
