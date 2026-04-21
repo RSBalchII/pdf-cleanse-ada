@@ -54,7 +54,13 @@ function getPythonCmd() {
     return python;
   } catch (e) {}
 
-  // Neither found; fallback to python3 to provide a clear error
+  // Neither found; try to find python3 in common paths
+  const commonPaths = ['/opt/homebrew/bin/python3', '/usr/local/bin/python3', '/usr/bin/python3'];
+  for (const p of commonPaths) {
+    if (existsSync(p)) return p;
+  }
+
+  // Still not found - return python3 with a note that it may need installation
   return python3;
 }
 
@@ -343,7 +349,7 @@ app.get('/api/report/latest', async (req, res) => {
 app.post('/api/deep-scan', async (req, res) => {
   const pythonCmd = getPythonCmd();
   const acrobatPath = getAcrobatPath();
-  
+
   // If we found Acrobat, add its directory to PATH for the subprocess
   const env = { ...process.env };
   if (process.platform === 'win32' && acrobatPath !== 'acrobat.exe') {
