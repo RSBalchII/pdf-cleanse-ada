@@ -23,13 +23,6 @@
     .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; }
     .panel-title { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
 
-    /* Setup Banner */
-    .setup-banner { background: var(--warn); color: #000; padding: 1rem; border-radius: 8px; text-align: center; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-    .setup-banner.ready { background: var(--ok); }
-    .setup-banner.hidden { display: none; }
-    .btn-setup { background: #000; color: #fff; border: none; padding: 0.5rem 1.5rem; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.875rem; }
-    .btn-setup:disabled { opacity: 0.5; cursor: not-allowed; }
-
     /* Upload Area */
     .upload-area { border: 2px dashed var(--border); border-radius: 8px; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 1rem; }
     .upload-area:hover, .upload-area.dragover { border-color: var(--accent); background: rgba(88,166,255,0.05); }
@@ -97,12 +90,6 @@
       <h1>📄 PDF ADA Compliance Processor</h1>
       <p>Accessibility assessment and remediation for WCAG/PDF-UA compliance</p>
     </header>
-
-    <!-- Setup Banner -->
-    <div class="setup-banner" id="setupBanner">
-      <span id="setupText">⚙️ First time? Click <strong>Setup</strong> to install dependencies.</span>
-      <button class="btn-setup" id="setupBtn">Install Dependencies</button>
-    </div>
 
     <div class="main-grid">
       <!-- Left: Upload & Process -->
@@ -178,13 +165,9 @@
 <script>
 // ── State ──────────────────────────────────────────────
 let uploadedFiles = [];
-let isSetup = false;
 let isProcessing = false;
 
 // ── DOM refs ───────────────────────────────────────────
-const setupBanner = document.getElementById('setupBanner');
-const setupBtn = document.getElementById('setupBtn');
-const setupText = document.getElementById('setupText');
 const uploadArea = document.getElementById('uploadArea');
 const fileInput = document.getElementById('fileInput');
 const browseBtn = document.getElementById('browseBtn');
@@ -228,51 +211,17 @@ async function checkAdobeStatus() {
   }
 }
 
-// ── Check Installation Status on Startup ───────────────────
-async function checkInstallationStatus() {
-  try {
-    const res = await fetch('/api/status');
-    const status = await res.json();
-    
-    if (!status.ready) {
-      let missingRequired = [];
-      let hasWarnings = false;
-      
-      status.components.forEach(comp => {
-        if (!comp.ok && comp.required) {
-          missingRequired.push(comp.name);
-        } else if (!comp.ok && !comp.required) {
-          hasWarnings = true;
-        }
-      });
-
-      if (missingRequired.length > 0) {
-        setupText.innerHTML = `⚠️ Missing dependencies: ${missingRequired.join(', ')}. Click <strong>Setup</strong> to install.`;
-        setupBanner.classList.remove('ready');
-      } else if (hasWarnings) {
-        setupText.innerHTML = 'ℹ️ Some optional features may be limited. Click <strong>Setup</strong> for full functionality.';
-        setupBanner.classList.add('ready');
-        setupBanner.style.background = 'var(--warn)';
-      }
-    } else {
-      isSetup = true;
-      setupBanner.classList.add('ready');
-      setupText.innerHTML = '✅ All dependencies installed. Project is ready!';
-      setupBtn.textContent = 'Done';
-      setupBtn.classList.add('btn-success');
-      termLog('System status: Ready ✓', 'success');
+// ── Connect SSE terminal stream ────────────────────────────
+  adobeCloudBtn.title = 'Ready to auto-tag PDFs';
     }
   } catch (err) {
-    termLog(`Status check error: ${err.message}`, 'warning');
+    // Server error — assume credentials exist
+    adobeCloudBtn.disabled = false;
   }
 }
 
-checkAdobeStatus();
-checkInstallationStatus();
-
 // ── Terminal logger ────────────────────────────────────
 function termLog(msg, type = 'info') {
-  const line = document.createElement('div');
   line.className = `line ${type}`;
   line.textContent = msg;
   terminal.appendChild(line);
@@ -292,7 +241,7 @@ function connectTerminal() {
   };
 }
 
-// ── Setup ──────────────────────────────────────────────
+// ── Connect SSE terminal stream ────────────────────────────
 setupBtn.addEventListener('click', async () => {
   setupBtn.disabled = true;
   setupBtn.textContent = 'Installing...';
