@@ -211,15 +211,6 @@ async function checkAdobeStatus() {
   }
 }
 
-// ── Connect SSE terminal stream ────────────────────────────
-  adobeCloudBtn.title = 'Ready to auto-tag PDFs';
-    }
-  } catch (err) {
-    // Server error — assume credentials exist
-    adobeCloudBtn.disabled = false;
-  }
-}
-
 // ── Terminal logger ────────────────────────────────────
 function termLog(msg, type = 'info') {
   line.className = `line ${type}`;
@@ -684,6 +675,25 @@ function guidanceCard(g, type) {
 checkInstallationStatus(); // Check status first
 connectTerminal();
 refreshFileList();
+
+// Simplified checkInstallationStatus (no-op since dependencies installed via .venv)
+async function checkInstallationStatus() {
+  try {
+    const res = await fetch('/api/status');
+    if (res.ok) {
+      connectTerminal();
+      refreshFileList();
+    } else {
+      console.log('Server starting up...');
+      setTimeout(connectTerminal, 2000);
+    }
+  } catch {
+    // Dependencies installed via .venv, assume ready
+    connectTerminal();
+    refreshFileList();
+  }
+}
+
 </script>
 </body>
 </html>
