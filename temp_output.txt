@@ -1,0 +1,67 @@
+{
+  "total_files": 1,
+  "scanned": 1,
+  "results": [
+    {
+      "filename": "Faculty_Hire_Procedure Revised 6 April 2022.pdf",
+      "wcag_level_a_pass": false,
+      "pdfua_compliant": false,
+      "section508_compliant": false,
+      "passed": 15,
+      "failed": 3,
+      "warnings": 0,
+      "manual_checks": 1,
+      "guidance": [
+        {
+          "check_id": "WCAG-2.4.2",
+          "name": "Document Title",
+          "status": "FAIL",
+          "wcag": "2.4.2",
+          "pdfua": "\u00a77.1",
+          "description": "Document title is missing",
+          "recommendation": "Set document title in metadata (not just filename)",
+          "adobe_fix": "1. Open PDF in Adobe Acrobat Pro\n2. Go to File > Properties > Description\n3. Enter a meaningful Title\n4. Save the document",
+          "auto_fixable": true,
+          "severity": "FAIL"
+        },
+        {
+          "check_id": "WCAG-2.4.2-DT",
+          "name": "Display Document Title",
+          "status": "FAIL",
+          "wcag": "2.4.2",
+          "pdfua": "\u00a77.1",
+          "description": "DisplayDocTitle not set (title may not show in title bar)",
+          "recommendation": "Set DisplayDocTitle to true",
+          "adobe_fix": "1. Open PDF in Adobe Acrobat Pro\n2. Go to File > Properties > Initial View\n3. Under 'Show', select 'Document Title'\n4. Save the document",
+          "auto_fixable": true,
+          "severity": "FAIL"
+        },
+        {
+          "check_id": "WCAG-2.4.6-H",
+          "name": "Heading Hierarchy",
+          "status": "FAIL",
+          "wcag": "1.3.1, 2.4.6",
+          "pdfua": "\u00a75.4",
+          "description": "Document starts with H2 instead of H1",
+          "recommendation": "First heading should be H1 (main document title)",
+          "adobe_fix": "1. Open PDF in Adobe Acrobat Pro\n2. Go to Tools > Accessibility > Tags\n3. Expand the Tags tree\n4. Right-click headings > Properties > Type\n5. Set correct heading level (H1, H2, etc.)\n6. Ensure H1 is the document title\n7. Save the document",
+          "auto_fixable": false,
+          "severity": "FAIL"
+        },
+        {
+          "check_id": "ERR-TABLES",
+          "name": "Table Headers Check Failed",
+          "status": "MANUAL_CHECK",
+          "wcag": "1.3.1",
+          "pdfua": "\u00a75.7",
+          "description": "name 'check_tables_headers' is not defined",
+          "recommendation": "Manual table check required",
+          "adobe_fix": "Manual review required in Adobe Acrobat:\n1. Open PDF in Adobe Acrobat Pro\n2. Go to Tools > Accessibility > Accessibility Check\n3. Review the flagged issue and fix manually",
+          "auto_fixable": false,
+          "severity": "WARN"
+        }
+      ],
+      "summary": "======================================================================\nCOMPLIANCE REPORT: Faculty_Hire_Procedure Revised 6 April 2022\n======================================================================\n\nOverall Status: NON-COMPLIANT\n\nStandards Compliance:\n  WCAG 2.2 Level A: \u2717 FAIL\n  PDF/UA-1:         \u2717 FAIL\n  Section 508:      \u2717 FAIL\n\nSummary:\n  Total Checks:  19\n  Passed:        15\n  Failed:        3\n  Warnings:      0\n  Manual Check:  1\n\nRemediation Summary:\n  Auto-fixable:    4\n  Human review:    9\n  Manual only:     4\n  Manual check:    2\n\nFailed Checks (Must Fix):\n--------------------------------------------------\n  \u2717 Document Title\n    Standard: WCAG 2.4.2, PDF/UA \u00a77.1\n    Issue: Document title is missing\n    Fix: Set document title in metadata (not just filename)\n\n  \u2717 Display Document Title\n    Standard: WCAG 2.4.2, PDF/UA \u00a77.1\n    Issue: DisplayDocTitle not set (title may not show in title bar)\n    Fix: Set DisplayDocTitle to true\n\n  \u2717 Heading Hierarchy\n    Standard: WCAG 1.3.1, 2.4.6, PDF/UA \u00a75.4\n    Issue: Document starts with H2 instead of H1\n    Fix: First heading should be H1 (main document title)\n"
+    }
+  ]
+}
