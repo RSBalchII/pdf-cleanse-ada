@@ -98,11 +98,6 @@
       <p>Accessibility assessment and remediation for WCAG/PDF-UA compliance</p>
     </header>
 
-    <!-- Setup Banner -->
-    <div class="setup-banner" id="setupBanner">
-      <span id="setupText">⚙️ First time? Click <strong>Setup</strong> to install dependencies.</span>
-      <button class="btn-setup" id="setupBtn">Install Dependencies</button>
-    </div>
 
     <div class="main-grid">
       <!-- Left: Upload & Process -->
@@ -178,7 +173,6 @@
 <script>
 // ── State ──────────────────────────────────────────────
 let uploadedFiles = [];
-let isSetup = false;
 let isProcessing = false;
 
 // ── DOM refs ───────────────────────────────────────────
@@ -268,7 +262,6 @@ async function checkInstallationStatus() {
 }
 
 checkAdobeStatus();
-checkInstallationStatus();
 
 // ── Terminal logger ────────────────────────────────────
 function termLog(msg, type = 'info') {
@@ -293,33 +286,6 @@ function connectTerminal() {
 }
 
 // ── Setup ──────────────────────────────────────────────
-setupBtn.addEventListener('click', async () => {
-  setupBtn.disabled = true;
-  setupBtn.textContent = 'Installing...';
-  termLog('Starting dependency installation...', 'accent');
-
-  try {
-    const res = await fetch('/api/setup', { method: 'POST' });
-    const data = await res.json();
-
-    if (data.success) {
-      isSetup = true;
-      setupBanner.classList.add('ready');
-      setupText.innerHTML = '✅ All dependencies installed. Project is ready!';
-      setupBtn.textContent = 'Done';
-      setupBtn.classList.add('btn-success');
-      termLog('Setup complete!', 'success');
-    } else {
-      termLog(`Setup failed: ${data.error}`, 'error');
-      setupBtn.disabled = false;
-      setupBtn.textContent = 'Retry Setup';
-    }
-  } catch (err) {
-    termLog(`Setup error: ${err.message}`, 'error');
-    setupBtn.disabled = false;
-    setupBtn.textContent = 'Retry Setup';
-  }
-});
 
 // ── File upload ────────────────────────────────────────
 uploadArea.addEventListener('click', () => fileInput.click());

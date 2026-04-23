@@ -21,15 +21,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-# Use PyPDF (migrated from pikepdf) - fallback to pikepdf if available
-try:
-    from pypdf.generic import NameObject, Array, Dictionary  # type: ignore
-except ImportError:
-    # Fall back to pikepdf classes when pypdf not installed
-    try:
-        from pikepdf.generic import Array, Dictionary  # type: ignore
-    except ImportError:
-        pass
+# Use PyPDF (migrated from pikepdf)
+from pypdf.generic import NameObject as Name, ArrayObject as Array, DictionaryObject as Dictionary
 
 # Import utility functions for extraction and analysis
 from _pdf_utils import count_images, get_links

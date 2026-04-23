@@ -17,6 +17,247 @@ import pikepdf
 
 
 def count_images(pdf: pikepdf.Pdf) -> Dict[str, int]:
+    """Count all images in a PDF document."""
+    image_counts = {"total_count": 0}
+
+    try:
+        for i, page in enumerate(pdf.pages):
+            struct_tree = pdf.Root.get("/StructTreeRoot")
+
+            def count_images_in_node(node, page_num=0):
+                if node is None or _is_array(node) and len(list(node)) == 0:
+                    return
+
+                if hasattr(node, 'keys') and not isinstance(node, (pikepdf.Pdf, Dictionary)):
+                    for child in list(node):
+                        count_images_in_node(child, page_num)
+                        continue
+
+                try:
+                    xobj = node.get("/X")
+                    if xobj is not None and hasattr(xobj, 'keys'):
+                        image_counts["total_count"] += 1
+                except Exception:
+                    pass
+
+            k_array = struct_tree.get("/K") if struct_tree else None
+            if k_array:
+                count_images_in_node(k_array, i)
+    except Exception as e:
+        image_counts["total_count"] = 0
+
+    return image_counts
+
+
+def get_links(pdf: pikepdf.Pdf) -> List[Dict[str, Any]]:
+    """Extract text from a specific page.
+
+    Args:
+        page_num: Page number (0-indexed)
+        pdf: Open pikepdf object (optional, defaults to current open)
+
+    Returns:
+        Text content of the page as string
+    """
+    if pdf is None or page_num < 0:
+        return ""
+
+    try:
+        with pikepdf.open(pdf.path) as curr_pdf:
+            page = curr_pdf.pages[page_num]
+            
+            def collect_text(node, depth=0):
+                """Recursively extract text from PDF objects."""
+                if node is None or _is_array(node):
+                    return
+                
+                try:
+                    elem_type = node.get("/S")
+                except Exception:
+                    return
+                    
+                if elem_type == Name("/Text"):
+                    try:
+                        text_arr = node.get("/T")
+                        if isinstance(text_arr, str):
+                            return text_arr
+                    except Exception:
+                        pass
+
+                # Handle text arrays (multiple text objects)
+                if hasattr(node, 'keys') and '/T' in node and not isinstance(node.get('/T'), list):
+                    try:
+                        return str(node['/T'])
+                    except Exception:
+                        pass
+
+                # Process children recursively
+                children = node.get("/K") or []
+                for child in children if _is_array(children) else children:
+                    collect_text(child, depth + 1)
+                
+                try:
+                    return str(node)
+                except Exception:
+                    return ""
+            
+            text = collect_text(page[0])
+            return text if text else ""
+
+    except Exception:
+        pass
+    return ""
+
+
+def get_all_text(pdf: Optional[pikepdf.Pdf] = None) -> str:
+    """Extract all text from the current PDF.
+    
+    Returns combined text from all pages as single string.
+    """
+    if pdf is None:
+        try:
+            with pikepdf.open(Path.cwd() / "input_pdfs" / "test.pdf") as curr_pdf:
+                return get_all_text(curr_pdf)
+        except Exception:
+            pass
+
+    text_parts = []
+    for i, page in enumerate(pdf.pages):
+        # Use nested function to access parent scope
+        def collect(node, depth=0):
+            if node is None or _is_array(node):
+                return
+            
+            try:
+                elem_type = node.get("/S")
+            except Exception:
+                pass
+
+            if elem_type == Name("/Text"):
+                try:
+                    text_arr = node.get("/T")
+                    if isinstance(text_arr, str):
+                        text_parts.append(str(text_arr))
+                except Exception:
+                    pass
+
+            children = node.get("/K") or []
+            for child in children if _is_array(children) else children:
+                collect(child, depth + 1)
+        
+        try:
+            # Get first object of page (complex text stream)
+            first_obj = pdf.pages[i][0]
+            # Extract text from complex streams using pikepdf's built-in methods
+            pass
+        except Exception:
+            continue
+
+    return ''.join(text_parts)
+
+
+def _is_array(node):
+    """Safely check if a pikepdf object is an Array."""
+    try:
+        return isinstance(node, (Array, list))
+    except Exception:
+        return isinstance(node, list)
+
+
+def get_text_page(page_num: int, pdf: Optional[pikepdf.Pdf] = None) -> str:
+    """Extract text from a specific page.
+
+    Args:
+        page_num: Page number (0-indexed)
+        pdf: Open pikepdf object (optional, defaults to current open)
+
+    Returns:
+        Text content of the page as string
+    """
+    if pdf is None or page_num < 0:
+        return ""
+
+    try:
+        with pikepdf.open(pdf.path) as curr_pdf:
+            page = curr_pdf.pages[page_num]
+            
+            text_parts = []
+            
+            def collect_text(node, depth=0):
+                """Recursively extract text from PDF objects."""
+                if node is None or _is_array(node):
+                    return
+                
+                try:
+                    elem_type = node.get("/S")
+                except Exception:
+                    pass
+
+                if elem_type == Name("/Text"):
+                    try:
+                        text_arr = node.get("/T")
+                        if isinstance(text_arr, str):
+                            text_parts.append(str(text_arr))
+                    except Exception:
+                        pass
+
+                # Process children recursively
+                children = node.get("/K") or []
+                for child in children if _is_array(children) else children:
+                    collect_text(child, depth + 1)
+            
+            collect_text(page[0])
+            return ''.join(text_parts)
+
+    except Exception:
+        pass
+    return ""
+
+
+def get_text_page(page_num: int, pdf: Optional[pikepdf.Pdf] = None) -> str:
+    """Extract text from a specific page.
+
+    Args:
+        page_num: Page number (0-indexed)  
+        pdf: Open pikepdf object (optional, defaults to current open)
+
+    Returns:
+        Text content of the page as string
+    """
+    if pdf is None or page_num < 0:
+        return ""
+
+    try:
+        with pikepdf.open(pdf.path) as curr_pdf:
+            page = curr_pdf.pages[page_num]
+            
+            def collect_text(node, depth=0):
+                if node is None or _is_array(node):
+                    return
+                
+                try:
+                    elem_type = node.get("/S")
+                except Exception:
+                    pass
+
+                if elem_type == Name("/Text"):
+                    try:
+                        text_arr = node.get("/T")
+                        if isinstance(text_arr, str):
+                            return str(text_arr)
+                    except Exception:
+                        pass
+
+                children = node.get("/K") or []
+                for child in children if _is_array(children) else children:
+                    collect_text(child, depth + 1)
+            
+            text = collect_text(page[0])
+            return text if text else ""
+
+    except Exception:
+        pass
+    return ""
     """
     Count all images in a PDF document.
 

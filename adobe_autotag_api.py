@@ -305,8 +305,8 @@ def auto_tag_pdf(api: AdobeAPI, pdf_path: Path, output_path: Path) -> dict:
                     print(f"  ⚠️  Warning: Adobe returned a PDF but StructTreeRoot is missing")
                     result["errors"].append("Output PDF has no StructTreeRoot")
         except ImportError:
-            result["tagged"] = True  # Assume success if pikepdf not available
-            print(f"  ⚠️  Could not verify tagging (pikepdf not available)")
+            result["tagged"] = True  # Assume success if PyPDF not available
+            print(f"  ⚠️  Could not verify tagging (PyPDF not available)")
 
         result["success"] = result["tagged"]
 

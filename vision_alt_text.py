@@ -27,14 +27,14 @@ OUTPUT_DIR = SCRIPT_DIR / "vision_results"
 
 def extract_images_from_pdf(pdf_path: Path) -> list[dict]:
     """
-    Extract images from PDF using pikepdf.
+    Extract images from PDF using PyPDF.
     Returns list of image data with metadata.
     """
-    import pikepdf
+from pypdf import PdfReader as PdfDoc
     
     images = []
     
-    with pikepdf.open(pdf_path) as pdf:
+    with PdfDoc.open(pdf_path) as pdf:
         for page_num, page in enumerate(pdf.pages, 1):
             resources = page.get("/Resources", {})
             xobjects = resources.get("/XObject", {})

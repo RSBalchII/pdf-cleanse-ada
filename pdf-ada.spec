@@ -9,14 +9,14 @@ Build with: pyinstaller pdf-ada.spec --clean
 Output: dist/pdf-ada.exe (Windows), .dmg (macOS)
 
 Key features:
-- Bundles pikepdf, Pillow, requests, pywin32 for Python operations
+- Bundles PyPDF, Pillow, requests, pywin32 for Python operations
 - Includes express and pdf-lib for Node.js server access
 - Handles multiprocessing for parallel processing tools
 """
 
 
 a = Analysis(
-    ['python/src/main.py'],  # Entry point for .exe executable
+    ['python/src/debug_entry.py'],  # Entry point for .exe executable
     pathex=[],               # No relative paths in build output
     binaries=[],             # No native binaries to bundle (except via deps)
     datas=[
@@ -26,10 +26,10 @@ a = Analysis(
         ('specs/spec.md', '.'),                     # Architecture documentation
     ],
     hiddenimports=[
-        'express',         # Node.js web server framework (used by bundled server.js)
-        'pdf-lib',         # PDF manipulation library (for metadata reading in UI)
-        'multiprocessing', # Parallel processing for batch tools (pdf_fix_single, deep_scan)
-        'pikepdf',         # Primary Python PDF library (metadata fix, structure modification)
+        'express',           # Node.js web server framework (used by bundled server.js)
+        'pdf-lib',           # PDF manipulation library (for metadata reading in UI)
+        'multiprocessing',  # Parallel processing for batch tools (pdf_fix_single, deep_scan)
+        'PyPDF',           # Python PDF library (migrated from pikepdf in commit 62e2cfc)
         'PIL',             # Pillow image analysis (alt-text detection)
         'requests',        # Adobe API HTTP client
     ],
@@ -67,8 +67,8 @@ exe = EXE(
     upx=True,                      # Enable UPX compression (smaller size)
     upx_exclude=[],                 # No exclusions
     
-    console='auto',                # Auto-detect: 'auto' or 'yes'/'no'
-    argv_emulation=False,          # Disable Windows console emulation for cross-platform
+    console='no',                   # Disable console for debugging
+    argv_emulation=False,          # Disable Windows console emulation to test PATH issue
     target_arch=None,              # Let PyInstaller auto-detect architecture
 )
 

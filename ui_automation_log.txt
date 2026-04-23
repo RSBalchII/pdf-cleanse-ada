@@ -1,0 +1,7 @@
+Automation Log started at: 2026-04-21 21:25:17
+[21:25:17] [INFO] Connecting to server...
+[21:25:18] [INFO] Starting emulation...
+[21:25:18] [ACCENT] UPLOADED: 2022 Faculty Development Week.pdf (186429 bytes)
+[21:25:18] [PRIMARY] ACTION: Clicked 'Process All PDFs' button
+[21:25:21] [ERROR] ERROR: Cannot connect to host localhost:3000 ssl:default [The remote computer refused the network connection]
+[21:25:21] [SUCCESS] Test Complete.

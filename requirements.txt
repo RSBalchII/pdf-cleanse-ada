@@ -1,0 +1,7 @@
+# Python Dependencies for PDF ADA Processor
+# Uses pikepdf for PDF structure manipulation and processing
+
+pikepdf>=6.0.0         # PDF structure tree manipulation (used by processPdf in server.js)
+Pillow>=10.0.0         # Image analysis (alt-text detection)
+requests>=2.31.0       # HTTP client for Adobe API calls  
+pywin32>=311.0        # Windows COM automation (optional, Acrobat integration)
