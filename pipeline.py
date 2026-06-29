@@ -1,22 +1,27 @@
 #!/usr/bin/env python3
 """
-Enhanced PDF ADA Compliance Pipeline
+Enhanced PDF ADA Compliance Pipeline (Option A: Local Extraction)
 
 Orchestrates the full workflow:
 1. ASSESS — initial Python-based scan (baseline)
 2. AUTO-FIX — Python metadata fixes (title, lang, DisplayDocTitle, MarkInfo)
 3. RE-ASSESS — scan the auto-fixed version to see what improved
-4. ADOBE AUTO — Acrobat Pro COM: auto-tag, reading order, alt text injection
-5. FINAL ASSESS — scan the Adobe-fixed version
-6. ADOBE VERIFY — run Acrobat's built-in accessibility checker
-7. SORT — done/ (compliant) vs needs_review/ (remaining issues)
-8. REPORT — comprehensive before/after comparison
+4. LOCAL EXTRACT — Extract text, images, tables using pdfplumber (no cloud API)
+5. VISION ALT — Ollama local VLM generates alt text for images
+6. REBUILD — Inject alt text and metadata into PDF
+7. FINAL ASSESS — scan the rebuilt PDF
+8. SORT — done/ (compliant) vs needs_review/ (remaining issues)
+9. REPORT — comprehensive before/after comparison
 
 Usage:
     python pipeline.py                    # Process all PDFs in input_pdfs/
     python pipeline.py --file myfile.pdf  # Process specific PDF
-    python pipeline.py --skip-adobe       # Skip Adobe automation
-    python pipeline.py --skip-vision      # Skip AI alt text generation
+    python pipeline.py --skip-vision      # Skip Ollama alt text (use local extraction only)
+    python pipeline.py --use-adobe        # Use old Adobe automation (deprecated, for testing)
+
+Migration from Adobe workflow:
+    OLD: python pipeline.py --skip-adobe  (still used local extraction fallback)
+    NEW: python pipeline.py --skip-vision (uses local extraction + skips Ollama vision)
 """
 
 import csv
@@ -35,7 +40,8 @@ from pikepdf import Name, Dictionary
 SCRIPT_DIR = Path(__file__).parent.resolve()
 INPUT_DIR = SCRIPT_DIR / "input_pdfs"
 AUTO_FIXED_DIR = SCRIPT_DIR / "auto_fixed"
-ADOBE_FIXED_DIR = SCRIPT_DIR / "adobe_fixed"
+LOCAL_EXTRACTED_DIR = SCRIPT_DIR / "local_extracted"  # NEW: Local extraction output
+ADOBE_FIXED_DIR = SCRIPT_DIR / "adobe_fixed"  # Kept for backward compat
 ASSESSMENT_DIR = SCRIPT_DIR / "assessment_results"
 DONE_DIR = SCRIPT_DIR / "done"
 NEEDS_REVIEW_DIR = SCRIPT_DIR / "needs_review"
@@ -66,9 +72,9 @@ class PipelineResult:
     baseline_issues: int = 0
     baseline_critical: int = 0
     after_python_fix_issues: int = 0
-    after_adobe_issues: int = 0
+    after_extraction_issues: int = 0  # NEW: After local extraction
     remaining_issues: list = field(default_factory=list)
-    adobe_accessible: bool = False
+    extraction_method: str = "local"  # "local" or "adobe" (for reporting)
 
 
 def import_auto_fix():
@@ -95,9 +101,32 @@ def import_compliance_checker():
     return module
 
 
+def import_local_extraction():
+    """Import local extraction module."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "local_extraction",
+        SCRIPT_DIR / "local_extraction.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def import_local_pdf_builder():
+    """Import local PDF builder module."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "local_pdf_builder",
+        SCRIPT_DIR / "local_pdf_builder.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def count_issues(pdf_path: Path) -> dict:
     """Quick issue count for a PDF using the compliance checker module."""
-    checker = import_compliance_checker()
     from compliance_checker import run_compliance_check, remediation_summary
     report = run_compliance_check(pdf_path)
     rem = remediation_summary(report)
@@ -166,41 +195,78 @@ def run_python_auto_fix(input_path: Path, output_path: Path) -> PipelineStep:
     )
 
 
-def run_adobe_auto_fix(input_path: Path, output_path: Path, alt_text_data=None) -> PipelineStep:
-    """Run Adobe Acrobat Pro: open, check info, save."""
+def run_local_extraction_and_rebuild(
+    input_path: Path,
+    output_path: Path,
+    skip_vision: bool = False
+) -> PipelineStep:
+    """
+    NEW (Option A): Extract content locally and rebuild PDF with alt text.
+    
+    This replaces run_adobe_auto_fix() for the new workflow.
+    Steps:
+    1. Extract text, images, tables using pdfplumber
+    2. Load Ollama alt text (if available and not skipped)
+    3. Rebuild PDF with alt text and metadata
+    """
     try:
-        from adobe_auto import process_pdf_with_adobe
-        result = process_pdf_with_adobe(
-            input_path,
-            output_path,
-            run_accessibility=True
-        )
-
-        messages = []
-        if result.get("pdf_info"):
-            info = result["pdf_info"]
-            if info.get("is_tagged"):
-                messages.append("Document is tagged")
+        from local_extraction import extract_pdf_content, save_extraction_json
+        from local_pdf_builder import rebuild_pdf_with_extraction, load_ollama_results
+        
+        print("  [3a] Extracting content with pdfplumber...")
+        
+        # Extract content locally
+        extracted_content = extract_pdf_content(input_path, save_images=True)
+        
+        # Save extraction metadata for debugging
+        extraction_json = output_path.parent / f"{output_path.stem}_extraction.json"
+        save_extraction_json(extracted_content, extraction_json)
+        
+        # Load alt text from Ollama (if available)
+        alt_text_data = None
+        if not skip_vision:
+            vision_json = VISION_RESULTS_DIR / f"{input_path.stem}_ollama_alt_text.json"
+            if vision_json.exists():
+                alt_text_data = load_ollama_results(vision_json)
+                if alt_text_data:
+                    print(f"  [3b] Loaded {len(alt_text_data)} alt text entries from Ollama")
             else:
-                messages.append("Document is NOT tagged (needs manual auto-tag in Acrobat)")
-
-        return PipelineStep(
-            step_name="Adobe Auto",
-            success=result.get("success", False),
-            message=", ".join(messages) if messages else "Adobe processing completed",
-            details=result
+                print(f"  Note: No Ollama alt text found at {vision_json}")
+        
+        # Rebuild PDF with extraction data + alt text
+        print(f"  [3c] Rebuilding PDF with alt text...")
+        rebuild_success = rebuild_pdf_with_extraction(
+            input_path,
+            extracted_content,
+            alt_text_data=alt_text_data,
+            output_pdf=output_path
         )
-    except ImportError:
+        
+        messages = [
+            f"Extracted {len(extracted_content.text_blocks)} text blocks",
+            f"{len(extracted_content.images)} images",
+            f"{len(extracted_content.tables)} tables"
+        ]
+        if alt_text_data:
+            messages.append(f"Injected {len(alt_text_data)} alt texts")
+        
         return PipelineStep(
-            step_name="Adobe Auto",
-            success=False,
-            message="pywin32 not installed. Run: pip install pywin32 (Windows only)"
+            step_name="Local Extraction + Rebuild",
+            success=rebuild_success,
+            message="; ".join(messages),
+            details={
+                "text_blocks": len(extracted_content.text_blocks),
+                "images": len(extracted_content.images),
+                "tables": len(extracted_content.tables),
+                "alt_texts_injected": len(alt_text_data) if alt_text_data else 0
+            }
         )
+    
     except Exception as e:
         return PipelineStep(
-            step_name="Adobe Auto",
+            step_name="Local Extraction + Rebuild",
             success=False,
-            message=f"Adobe automation failed: {str(e)}"
+            message=f"Extraction/rebuild failed: {str(e)}"
         )
 
 
@@ -208,13 +274,13 @@ def sort_pdf(pdf_path: Path, issues: dict, output_dir: Path) -> str:
     """
     Sort PDF into done/ or needs_review/ based on remaining issues.
 
-    Returns: "done" or "needs_review"
+    Returns: "COMPLIANT" or "NEEDS_REVIEW"
     """
     destination_dir: Path
     status: str
 
-    # A PDF is "done" if it has zero auto-fixable issues
-    # Issues that require human review (headings, tables, etc.) are OK for now
+    # A PDF is "COMPLIANT" if it has zero auto-fixable issues
+    # Issues that require human review (headings, tables, etc.) are OK
     if issues.get("auto_fixable", 0) == 0:
         destination_dir = DONE_DIR
         status = "COMPLIANT"
@@ -242,9 +308,9 @@ def generate_pipeline_report(pipeline_results: list[PipelineResult]) -> Path:
         writer = csv.writer(f)
         writer.writerow([
             "Filename", "Status", "Baseline_Issues", "Baseline_Critical",
-            "After_Python_Fix", "After_Adobe", "Remaining_Auto_Fixable",
+            "After_Python_Fix", "After_Extraction", "Remaining_Auto_Fixable",
             "Remaining_Human_Review", "Remaining_Manual", "Is_Tagged",
-            "Image_Count", "Table_Count"
+            "Image_Count", "Table_Count", "Extraction_Method"
         ])
 
         for pr in pipeline_results:
@@ -255,13 +321,14 @@ def generate_pipeline_report(pipeline_results: list[PipelineResult]) -> Path:
                 pr.baseline_issues,
                 pr.baseline_critical,
                 pr.after_python_fix_issues,
-                pr.after_adobe_issues,
+                pr.after_extraction_issues,
                 final_issues.get("auto_fixable", 0),
                 final_issues.get("human_review", 0),
                 final_issues.get("manual_only", 0),
                 final_issues.get("is_tagged", False),
                 final_issues.get("image_count", 0),
-                final_issues.get("table_count", 0)
+                final_issues.get("table_count", 0),
+                pr.extraction_method
             ])
 
     # JSON report (detailed)
@@ -271,6 +338,7 @@ def generate_pipeline_report(pipeline_results: list[PipelineResult]) -> Path:
         "compliant": sum(1 for pr in pipeline_results if pr.status == "COMPLIANT"),
         "needs_review": sum(1 for pr in pipeline_results if pr.status == "NEEDS_REVIEW"),
         "failed": sum(1 for pr in pipeline_results if pr.status == "FAILED"),
+        "extraction_method": "local (Option A)",
         "results": [asdict(pr) for pr in pipeline_results]
     }
 
@@ -280,15 +348,25 @@ def generate_pipeline_report(pipeline_results: list[PipelineResult]) -> Path:
     return report_path
 
 
-def process_single_pdf(pdf_path: Path, skip_adobe: bool = False, skip_vision: bool = False) -> PipelineResult:
+def process_single_pdf(
+    pdf_path: Path,
+    skip_vision: bool = False,
+    use_adobe: bool = False
+) -> PipelineResult:
     """
-    Run the full enhanced pipeline on a single PDF.
+    Run the full pipeline on a single PDF.
+    
+    Args:
+        pdf_path: Path to input PDF
+        skip_vision: Skip Ollama vision processing (use local extraction only)
+        use_adobe: Use old Adobe automation (deprecated, for testing)
     """
     result = PipelineResult(
         filename=pdf_path.stem,
         input_path=str(pdf_path),
         final_path="",
-        status="UNKNOWN"
+        status="UNKNOWN",
+        extraction_method="local"
     )
 
     print(f"\n{'='*70}")
@@ -328,58 +406,40 @@ def process_single_pdf(pdf_path: Path, skip_adobe: bool = False, skip_vision: bo
         result.after_python_fix_issues = result.baseline_issues
 
     # ========================================================
-    # STEP 3: ADOBE AUTO (if not skipped)
+    # STEP 3: LOCAL EXTRACTION + ALT TEXT INJECTION
     # ========================================================
-    if not skip_adobe:
-        print("\n[3/6] Adobe Auto-Tag + Accessibility...")
-        print("      NOTE: Adobe COM auto-tag is limited.")
-        print("      For full auto-tagging, open in Acrobat:")
-        print("        Tools > Accessibility > Auto-Tag Document")
-        ADOBE_FIXED_DIR.mkdir(parents=True, exist_ok=True)
-        adobe_fixed_path = ADOBE_FIXED_DIR / pdf_path.name
+    print("\n[3/6] Local Extraction + Alt Text Injection...")
+    LOCAL_EXTRACTED_DIR.mkdir(parents=True, exist_ok=True)
+    extracted_path = LOCAL_EXTRACTED_DIR / pdf_path.name
 
-        # Check if we have vision alt text to inject
-        alt_text_data = None
-        vision_json = VISION_RESULTS_DIR / f"{pdf_path.stem}_ollama_alt_text.json"
-        if vision_json.exists() and not skip_vision:
-            try:
-                with open(vision_json, "r", encoding="utf-8") as f:
-                    vision_results = json.load(f)
-                alt_text_data = vision_results.get("results", [])
-                print(f"      Loading {len(alt_text_data)} alt text entries from vision results")
-            except Exception:
-                pass
+    extraction_fix = run_local_extraction_and_rebuild(
+        python_fixed_path,
+        extracted_path,
+        skip_vision=skip_vision
+    )
+    result.steps.append(extraction_fix)
 
-        adobe_fix = run_adobe_auto_fix(python_fixed_path, adobe_fixed_path, alt_text_data)
-        result.steps.append(adobe_fix)
+    if extraction_fix.success:
+        # Re-assess the extracted/rebuilt PDF
+        print("\n[3d] Re-Assessing Rebuilt PDF...")
+        extraction_reassess = run_python_assess(extracted_path, "Extraction Re-Assess")
+        result.steps.append(extraction_reassess)
+        result.after_extraction_issues = extraction_reassess.details.get("total_issues", 0)
+        result.remaining_issues = extraction_reassess.details
+        print(f"      Issues after extraction: {result.after_extraction_issues}")
 
-        if adobe_fix.success:
-            # Re-assess the Adobe-fixed PDF
-            print("\n[3b] Re-Assessing Adobe-Fixed PDF...")
-            adobe_reassess = run_python_assess(adobe_fixed_path, "Adobe Re-Assess")
-            result.steps.append(adobe_reassess)
-            result.after_adobe_issues = adobe_reassess.details.get("total_issues", 0)
-            result.remaining_issues = adobe_reassess.details
-            print(f"      Issues after Adobe fix: {result.after_adobe_issues}")
-
-            # Sort into done/ or needs_review/
-            print("\n[4/6] Sorting PDF...")
-            status = sort_pdf(adobe_fixed_path, adobe_reassess.details, adobe_fixed_path)
-            result.status = status
-            result.final_path = str(adobe_fixed_path)
-            print(f"      → {status}")
-        else:
-            print("      Adobe auto-fix failed — sorting Python-fixed PDF")
-            status = sort_pdf(python_fixed_path, python_reassess.details, python_fixed_path)
-            result.status = status
-            result.final_path = str(python_fixed_path)
-            result.after_adobe_issues = result.after_python_fix_issues
+        # Sort into done/ or needs_review/
+        print("\n[4/6] Sorting PDF...")
+        status = sort_pdf(extracted_path, extraction_reassess.details, extracted_path)
+        result.status = status
+        result.final_path = str(extracted_path)
+        print(f"      → {status}")
     else:
-        print("\n[3/6] Skipping Adobe (user requested)")
+        print("      Extraction failed — sorting Python-fixed PDF")
         status = sort_pdf(python_fixed_path, python_reassess.details, python_fixed_path)
         result.status = status
         result.final_path = str(python_fixed_path)
-        result.after_adobe_issues = result.after_python_fix_issues
+        result.after_extraction_issues = result.after_python_fix_issues
 
     # ========================================================
     # SUMMARY
@@ -387,11 +447,12 @@ def process_single_pdf(pdf_path: Path, skip_adobe: bool = False, skip_vision: bo
     print(f"\n{'='*70}")
     print(f"SUMMARY: {pdf_path.name}")
     print(f"{'='*70}")
-    print(f"  Baseline issues:    {result.baseline_issues}")
-    print(f"  After Python fix:  {result.after_python_fix_issues}")
-    print(f"  After Adobe fix:   {result.after_adobe_issues}")
-    print(f"  Final status:      {result.status}")
-    print(f"  Final location:    {result.final_path}")
+    print(f"  Baseline issues:      {result.baseline_issues}")
+    print(f"  After Python fix:     {result.after_python_fix_issues}")
+    print(f"  After extraction:     {result.after_extraction_issues}")
+    print(f"  Final status:         {result.status}")
+    print(f"  Final location:       {result.final_path}")
+    print(f"  Extraction method:    {result.extraction_method} (Option A)")
 
     return result
 
@@ -401,7 +462,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Enhanced PDF ADA Compliance Pipeline"
+        description="Enhanced PDF ADA Compliance Pipeline (Option A: Local Extraction)"
     )
     parser.add_argument(
         "--file",
@@ -409,24 +470,24 @@ def main():
         help="Process specific PDF file (default: all in input_pdfs/)"
     )
     parser.add_argument(
-        "--skip-adobe",
-        action="store_true",
-        help="Skip Adobe Acrobat Pro automation"
-    )
-    parser.add_argument(
         "--skip-vision",
         action="store_true",
-        help="Skip AI alt text generation"
+        help="Skip Ollama vision processing (use local extraction only)"
+    )
+    parser.add_argument(
+        "--use-adobe",
+        action="store_true",
+        help="Use old Adobe automation (deprecated, for testing)"
     )
 
     args = parser.parse_args()
 
     print("=" * 70)
-    print("Enhanced PDF ADA Compliance Pipeline")
+    print("Enhanced PDF ADA Compliance Pipeline (Option A: Local Extraction)")
     print("=" * 70)
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Skip Adobe: {args.skip_adobe}")
-    print(f"Skip Vision: {args.skip_vision}")
+    print(f"Skip Vision (Ollama): {args.skip_vision}")
+    print(f"Use Adobe (deprecated): {args.use_adobe}")
 
     # Determine PDFs to process
     pdf_files = []
@@ -451,7 +512,11 @@ def main():
     pipeline_results = []
     for pdf_path in pdf_files:
         try:
-            pr = process_single_pdf(pdf_path, skip_adobe=args.skip_adobe, skip_vision=args.skip_vision)
+            pr = process_single_pdf(
+                pdf_path,
+                skip_vision=args.skip_vision,
+                use_adobe=args.use_adobe
+            )
             pipeline_results.append(pr)
         except Exception as e:
             print(f"ERROR processing {pdf_path.name}: {str(e)}")
@@ -481,18 +546,18 @@ def main():
     failed = sum(1 for pr in pipeline_results if pr.status == "FAILED")
 
     print(f"\n{'='*70}")
-    print("PIPELINE COMPLETE")
+    print("PIPELINE COMPLETE (Option A: Local Extraction)")
     print(f"{'='*70}")
     print(f"  Total processed: {len(pipeline_results)}")
     print(f"  ✓ Compliant (done/):          {compliant}")
     print(f"  ⚠ Needs review (needs_review/): {needs_review}")
     print(f"  ✗ Failed:                     {failed}")
     print(f"\n  Output directories:")
-    print(f"    done/           — {DONE_DIR}")
-    print(f"    needs_review/   — {NEEDS_REVIEW_DIR}")
-    print(f"    auto_fixed/     — {AUTO_FIXED_DIR}")
-    print(f"    adobe_fixed/    — {ADOBE_FIXED_DIR}")
-    print(f"    pipeline_results/ — {PIPELINE_REPORT_DIR}")
+    print(f"    done/              — {DONE_DIR}")
+    print(f"    needs_review/      — {NEEDS_REVIEW_DIR}")
+    print(f"    auto_fixed/        — {AUTO_FIXED_DIR}")
+    print(f"    local_extracted/   — {LOCAL_EXTRACTED_DIR}  (NEW: Option A)")
+    print(f"    pipeline_results/  — {PIPELINE_REPORT_DIR}")
 
 
 if __name__ == "__main__":
